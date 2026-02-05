@@ -86,19 +86,19 @@ function LandingPage({ onStart }: { onStart: () => void }) {
   ]
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[var(--bg-primary)]">
       {/* Sticky Nav */}
-      <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur border-b border-gray-100 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+      <nav className="fixed top-0 left-0 right-0 glass z-50">
+        <div className="container-custom py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-[var(--primary)] rounded-xl flex items-center justify-center shadow-lg">
               <Link2 className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-black tracking-tight text-gray-900">LinkFácil</span>
+            <span className="text-2xl font-black tracking-tight text-[var(--text-primary)]">LinkFácil</span>
           </div>
           <button 
             onClick={onStart} 
-            className="bg-brand-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-brand-700 transition-all"
+            className="btn-primary text-sm md:text-base"
           >
             Criar Página Grátis
           </button>
@@ -106,50 +106,50 @@ function LandingPage({ onStart }: { onStart: () => void }) {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 bg-gradient-to-br from-brand-50 via-white to-brand-50">
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full font-medium text-sm mb-8">
+      <section className="pt-32 pb-20 hero-gradient hero-pattern">
+        <div className="container-custom text-center">
+          <div className="inline-flex items-center gap-2 badge badge-success mb-8 animate-fadeInUp">
             <span>🎉 Oferta de Lançamento: 50% OFF no primeiro mês!</span>
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black text-gray-900 leading-tight mb-6">
+          <h1 className="font-black text-[var(--text-primary)] leading-tight mb-6 animate-fadeInUp stagger-1 text-balance">
             Crie Sua Página de Links<br />
-            <span className="text-brand-600">em 2 Minutos</span> ⏱️
+            <span className="gradient-text">em 2 Minutos</span> ⏱️
           </h1>
           
-          <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-8">
-            Com <strong>WhatsApp integrado</strong>, <strong>pagamentos via PIX</strong> e <strong>design brasileiro</strong>.
+          <p className="text-xl md:text-2xl text-[var(--text-secondary)] max-w-3xl mx-auto mb-8 animate-fadeInUp stagger-2">
+            Com <strong className="text-[var(--text-primary)]">WhatsApp integrado</strong>, <strong className="text-[var(--text-primary)]">pagamentos via PIX</strong> e <strong className="text-[var(--text-primary)]">design brasileiro</strong>.
             <br className="hidden md:block" />
             Muito mais barato que o Linktree!
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8 animate-fadeInUp stagger-3">
             <button 
               onClick={onStart} 
-              className="bg-brand-600 text-white px-10 py-5 rounded-2xl font-black text-xl hover:bg-brand-700 hover:scale-105 transition-all shadow-2xl shadow-brand-500/30 flex items-center justify-center gap-2"
+              className="btn-primary text-lg"
             >
               Começar Gratuitamente
-              <ChevronRight className="w-6 h-6" />
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
 
-          <p className="text-gray-500">
-            ✅ Sem cartão de crédito <span className="mx-2">•</span> 
-            ✅ Setup em 2 minutos <span className="mx-2">•</span> 
-            ✅ Cancele quando quiser
+          <p className="text-[var(--text-muted)] animate-fadeInUp stagger-4">
+            <span className="inline-flex items-center gap-1"><Check className="w-4 h-4 text-green-500" /> Sem cartão de crédito</span> <span className="mx-3">•</span> 
+            <span className="inline-flex items-center gap-1"><Check className="w-4 h-4 text-green-500" /> Setup em 2 minutos</span> <span className="mx-3">•</span> 
+            <span className="inline-flex items-center gap-1"><Check className="w-4 h-4 text-green-500" /> Cancele quando quiser</span>
           </p>
         </div>
       </section>
 
       {/* Comparison Bar */}
-      <section className="py-6 bg-gray-900 text-white">
-        <div className="max-w-6xl mx-auto px-6 text-center">
+      <section className="py-6 bg-[var(--bg-dark)] text-white">
+        <div className="container-custom text-center">
           <p className="text-lg">
-            <span className="text-gray-400">Linktree cobra:</span> <span className="line-through">R$ 45/mês</span>
-            <span className="mx-4">|</span>
-            <span className="text-brand-400 font-bold">LinkFácil: R$ 9,90/mês</span>
-            <span className="mx-4">|</span>
-            <span className="text-green-400">Economize 78%! 💰</span>
+            <span className="text-[var(--text-muted)]">Linktree cobra:</span> <span className="line-through opacity-60">R$ 45/mês</span>
+            <span className="mx-4 text-[var(--text-muted)]">|</span>
+            <span className="text-[var(--primary)] font-bold">LinkFácil: R$ 9,90/mês</span>
+            <span className="mx-4 text-[var(--text-muted)]">|</span>
+            <span className="text-[var(--accent)] font-medium">Economize 78%! 💰</span>
           </p>
         </div>
       </section>
