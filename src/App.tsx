@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import './index.css'
-import { supabase, type User, type Link } from './lib/supabase'
-import { generatePixPayload, getPixQrCodeUrl } from './lib/pix'
+import { supabase, User, Link } from './lib/supabase'
+import { generatePixPayload, getPixQrCodeUrl, isValidPixKey, formatPixKey } from './lib/pix'
 import { 
-  Link2, CreditCard, Smartphone, Palette, 
-  LogOut,
-  Trash2, GripVertical, Plus, Copy, CheckCircle, X
+  Link2, Share2, CreditCard, Smartphone, Palette, 
+  ChevronRight, Check, LogIn, UserPlus, LogOut, Eye, EyeOff,
+  Trash2, GripVertical, Plus, ExternalLink, Copy, CheckCircle, X
 } from 'lucide-react'
 
 // Auth Hook
@@ -52,31 +52,250 @@ function useAuth() {
   return { user, loading, setUser }
 }
 
-// Landing Page
+// Landing Page - Optimized with landing-page-generator skill
 function LandingPage({ onStart }: { onStart: () => void }) {
+  const benefits = [
+    { icon: CreditCard, text: 'Receba pagamentos via PIX direto na página' },
+    { icon: Smartphone, text: 'Botão de WhatsApp com mensagem personalizada' },
+    { icon: Palette, text: 'Design brasileiro único (temas Carnaval, Futebol, Praia)' },
+    { icon: Link2, text: 'Links ilimitados e personalizáveis' },
+    { icon: CheckCircle, text: 'Estatísticas em tempo real' },
+    { icon: CheckCircle, text: 'URL personalizada: linkfacil.app/@seunome' },
+  ]
+
+  const features = [
+    { title: 'Editor Drag \u0026 Drop', desc: 'Monte sua página em minutos, sem código' },
+    { title: 'QR Code PIX', desc: 'Gere QR codes dinâmicos para qualquer valor' },
+    { title: 'Temas Exclusivos', desc: 'Cores e estilos inspirados no Brasil' },
+    { title: 'Dashboard Completo', desc: 'Gerencie links, veja analytics, configure PIX' },
+    { title: '100% Responsivo', desc: 'Perfeito em qualquer dispositivo' },
+    { title: 'Suporte Local', desc: 'Atendimento em português, do Brasil' },
+  ]
+
+  const testimonials = [
+    { name: 'Ana Silva', role: 'Influencer', text: 'Consegui triplicar meus agendamentos com o botão de WhatsApp!' },
+    { name: 'Carlos Mendes', role: 'Barbeiro', text: 'Clientes pagam direto pela página. Não preciso mais ficar enviando chave PIX!' },
+    { name: 'Marina Costa', role: 'Consultora', text: 'Muito mais barato que o Linktree e com cara de Brasil. Amo!' },
+  ]
+
+  const faqs = [
+    { q: 'Preciso saber programar?', a: 'Não! Nosso editor é super intuitivo. Em 2 minutos sua página está no ar.' },
+    { q: 'O PIX funciona de verdade?', a: 'Sim! Geramos QR codes válidos que funcionam em qualquer banco. O dinheiro vai direto pra sua conta.' },
+    { q: 'Posso usar meu próprio domínio?', a: 'Na versão Pro, sim! Você pode usar @seudominio.com' },
+    { q: 'Tem garantia?', a: 'Sim! 7 dias de garantia incondicional. Não gostou? Devolvemos seu dinheiro.' },
+  ]
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white">
-      <nav className="px-6 py-4 flex justify-between items-center max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
-            <Link2 className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-white">
+      {/* Sticky Nav */}
+      <nav className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur border-b border-gray-100 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
+              <Link2 className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-2xl font-black tracking-tight text-gray-900">LinkFácil</span>
           </div>
-          <span className="text-2xl font-black tracking-tight text-gray-900">LinkFácil</span>
+          <button 
+            onClick={onStart} 
+            className="bg-brand-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-brand-700 transition-all"
+          >
+            Criar Página Grátis
+          </button>
         </div>
-        <button onClick={onStart} className="bg-brand-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-brand-700 transition-all">
-          Criar Minha Página
-        </button>
       </nav>
 
-      <section className="max-w-6xl mx-auto px-6 py-20 text-center">
-        <h1 className="text-5xl md:text-7xl font-black text-gray-900 leading-tight mb-6">
-          Seus links em uma<br />
-          <span className="text-brand-600">página linda</span> 🎨
-        </h1>
-        <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-10">
-          Crie sua página de links com WhatsApp, PIX e design brasileiro. 
-          Muito mais barato que o Linktree!
-        </p>
+      {/* Hero Section */}
+      <section className="pt-32 pb-20 bg-gradient-to-br from-brand-50 via-white to-brand-50">
+        <div className="max-w-6xl mx-auto px-6 text-center">
+          <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full font-medium text-sm mb-8">
+            <span>🎉 Oferta de Lançamento: 50% OFF no primeiro mês!</span>
+          </div>
+
+          <h1 className="text-5xl md:text-7xl font-black text-gray-900 leading-tight mb-6">
+            Crie Sua Página de Links<br />
+            <span className="text-brand-600">em 2 Minutos</span> ⏱️
+          </h1>
+          
+          <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-8">
+            Com <strong>WhatsApp integrado</strong>, <strong>pagamentos via PIX</strong> e <strong>design brasileiro</strong>.
+            <br className="hidden md:block" />
+            Muito mais barato que o Linktree!
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <button 
+              onClick={onStart} 
+              className="bg-brand-600 text-white px-10 py-5 rounded-2xl font-black text-xl hover:bg-brand-700 hover:scale-105 transition-all shadow-2xl shadow-brand-500/30 flex items-center justify-center gap-2"
+            >
+              Começar Gratuitamente
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </div>
+
+          <p className="text-gray-500">
+            ✅ Sem cartão de crédito <span className="mx-2">•</span> 
+            ✅ Setup em 2 minutos <span className="mx-2">•</span> 
+            ✅ Cancele quando quiser
+          </p>
+        </div>
+      </section>
+
+      {/* Comparison Bar */}
+      <section className="py-6 bg-gray-900 text-white">
+        <div className="max-w-6xl mx-auto px-6 text-center">
+          <p className="text-lg">
+            <span className="text-gray-400">Linktree cobra:</span> <span className="line-through">R$ 45/mês</span>
+            <span className="mx-4">|</span>
+            <span className="text-brand-400 font-bold">LinkFácil: R$ 9,90/mês</span>
+            <span className="mx-4">|</span>
+            <span className="text-green-400">Economize 78%! 💰</span>
+          </p>
+        </div>
+      </section>
+
+      {/* Benefits Section */}
+      <section className="py-20">
+        <div className="max-w-6xl mx-auto px-6">
+          <h2 className="text-4xl font-black text-center text-gray-900 mb-4">
+            Por que escolher o LinkFácil?
+          </h2>
+          <p className="text-xl text-gray-600 text-center max-w-2xl mx-auto mb-12">
+            Tudo que você precisa para vender mais e organizar seus links
+          </p>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {benefits.map((benefit, idx) => (
+              <div key={idx} className="flex items-start gap-4 p-6 bg-gray-50 rounded-2xl">
+                <div className="w-12 h-12 bg-brand-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <benefit.icon className="w-6 h-6 text-brand-600" />
+                </div>
+                <p className="font-medium text-gray-900">{benefit.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Grid */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-6xl mx-auto px-6">
+          <h2 className="text-4xl font-black text-center text-gray-900 mb-4">O que você recebe</h2>
+          <p className="text-xl text-gray-600 text-center max-w-2xl mx-auto mb-12">
+            Funcionalidades pensadas para quem vende no Brasil
+          </p>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {features.map((feature, idx) => (
+              <div key={idx} className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{feature.title}</h3>
+                <p className="text-gray-600">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="py-20">
+        <div className="max-w-6xl mx-auto px-6">
+          <h2 className="text-4xl font-black text-center text-gray-900 mb-12">
+            O que dizem nossos usuários
+          </h2>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {testimonials.map((t, idx) => (
+              <div key={idx} className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
+                <p className="text-gray-700 mb-6 text-lg">"{t.text}"</p>
+                <div>
+                  <p className="font-bold text-gray-900">{t.name}</p>
+                  <p className="text-sm text-gray-500">{t.role}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-4xl mx-auto px-6">
+          <h2 className="text-4xl font-black text-center text-gray-900 mb-4">Preço Simples</h2>
+          <p className="text-xl text-gray-600 text-center mb-12">Sem complicação, sem surpresas</p>
+
+          <div className="bg-white rounded-3xl shadow-2xl p-10 text-center border-4 border-brand-500">
+            <div className="text-sm text-brand-600 font-bold uppercase tracking-wide mb-4">Plano Pro</div>
+            <div className="flex items-baseline justify-center gap-2 mb-6">
+              <span className="text-gray-400 line-through text-2xl">R$ 19,90</span>
+              <span className="text-6xl font-black text-gray-900">R$ 9,90</span>
+              <span className="text-gray-500">/mês</span>
+            </div>
+
+            <ul className="space-y-4 text-left max-w-md mx-auto mb-8">
+              {['Links ilimitados', 'PIX integrado', 'WhatsApp button', 'Estatísticas', 'Temas premium', 'Suporte por email'].map((item, idx) => (
+                <li key={idx} className="flex items-center gap-3">
+                  <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+
+            <button 
+              onClick={onStart}
+              className="w-full bg-brand-600 text-white py-4 rounded-xl font-black text-xl hover:bg-brand-700 transition-all"
+            >
+              Começar Agora
+            </button>
+
+            <p className="text-sm text-gray-500 mt-4">7 dias de garantia • Cancele quando quiser</p>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-20">
+        <div className="max-w-3xl mx-auto px-6">
+          <h2 className="text-4xl font-black text-center text-gray-900 mb-12">Dúvidas Frequentes</h2>
+
+          <div className="space-y-4">
+            {faqs.map((faq, idx) => (
+              <div key={idx} className="bg-gray-50 p-6 rounded-2xl">
+                <h3 className="font-bold text-gray-900 mb-2">{faq.q}</h3>
+                <p className="text-gray-600">{faq.a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-20 bg-brand-600">
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <h2 className="text-4xl md:text-5xl font-black text-white mb-6">
+            Pronto para começar?
+          </h2>
+          <p className="text-xl text-brand-100 mb-8">
+            Crie sua página de links em menos de 2 minutos
+          </p>
+          <button 
+            onClick={onStart}
+            className="bg-white text-brand-600 px-10 py-5 rounded-2xl font-black text-xl hover:scale-105 transition-all shadow-xl"
+          >
+            Criar Página Grátis →
+          </button>
+          <p className="text-brand-200 mt-6">
+            ⏰ Oferta de lançamento: 50% OFF no primeiro mês
+          </p>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-8 bg-gray-900 text-gray-400 text-center">
+        <p>© 2026 LinkFácil. Feito com ❤️ no Brasil 🇧🇷</p>
+      </footer>
+    </div>
+  )
+}
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
           <button onClick={onStart} className="bg-brand-600 text-white px-8 py-4 rounded-2xl font-black text-lg hover:bg-brand-700 hover:scale-105 transition-all shadow-xl shadow-brand-500/30">
@@ -91,34 +310,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
         </div>
       </section>
 
-      <section className="max-w-6xl mx-auto px-6 py-20">
-        <h2 className="text-4xl font-black text-center text-gray-900 mb-16">Tudo que você precisa</h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          <FeatureCard icon={CreditCard} color="green" title="PIX na Página" 
-            desc="Receba pagamentos direto na sua página. Cliente vê o valor e paga na hora!" />
-          <FeatureCard icon={Smartphone} color="blue" title="WhatsApp Integrado" 
-            desc="Botão de WhatsApp com mensagem personalizada. Cliente clica e já te chama!" />
-          <FeatureCard icon={Palette} color="purple" title="Temas Brasileiros" 
-            desc="Cores e estilos que combinam com o Brasil. Carnaval, futebol, praia!" />
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function FeatureCard({ icon: Icon, color, title, desc }: { icon: any, color: string, title: string, desc: string }) {
-  const colors: Record<string, string> = {
-    green: 'bg-green-100 text-green-600',
-    blue: 'bg-blue-100 text-blue-600',
-    purple: 'bg-purple-100 text-purple-600'
-  }
-  return (
-    <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-100">
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${colors[color]}`}>
-        <Icon className="w-7 h-7" />
-      </div>
-      <h3 className="text-xl font-bold text-gray-900 mb-3">{title}</h3>
-      <p className="text-gray-600">{desc}</p>
+      </footer>
     </div>
   )
 }
