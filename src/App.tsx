@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import './index.css'
-import { supabase, User, Link } from './lib/supabase'
-import { generatePixPayload, getPixQrCodeUrl, isValidPixKey, formatPixKey } from './lib/pix'
-import { 
-  Link2, Share2, CreditCard, Smartphone, Palette, 
-  ChevronRight, Check, LogIn, UserPlus, LogOut, Eye, EyeOff,
-  Trash2, GripVertical, Plus, ExternalLink, Copy, CheckCircle, X
+import { supabase } from './lib/supabase'
+import type { User, Link } from './lib/supabase'
+import { generatePixPayload, getPixQrCodeUrl } from './lib/pix'
+import {
+  Link2, CreditCard, Smartphone, Palette,
+  ChevronRight, Check, LogOut,
+  Trash2, GripVertical, Plus, Copy, CheckCircle, X
 } from 'lucide-react'
 
 // Auth Hook
@@ -42,7 +43,7 @@ function useAuth() {
       .select('*')
       .eq('id', userId)
       .single()
-    
+
     if (data) {
       setUser(data as User)
     }
@@ -96,8 +97,8 @@ function LandingPage({ onStart }: { onStart: () => void }) {
             </div>
             <span className="text-2xl font-black tracking-tight text-gray-900">LinkFácil</span>
           </div>
-          <button 
-            onClick={onStart} 
+          <button
+            onClick={onStart}
             className="bg-brand-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-brand-700 transition-all"
           >
             Criar Página Grátis
@@ -116,7 +117,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
             Crie Sua Página de Links<br />
             <span className="text-brand-600">em 2 Minutos</span> ⏱️
           </h1>
-          
+
           <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-8">
             Com <strong>WhatsApp integrado</strong>, <strong>pagamentos via PIX</strong> e <strong>design brasileiro</strong>.
             <br className="hidden md:block" />
@@ -124,8 +125,8 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-            <button 
-              onClick={onStart} 
+            <button
+              onClick={onStart}
               className="bg-brand-600 text-white px-10 py-5 rounded-2xl font-black text-xl hover:bg-brand-700 hover:scale-105 transition-all shadow-2xl shadow-brand-500/30 flex items-center justify-center gap-2"
             >
               Começar Gratuitamente
@@ -134,8 +135,8 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           </div>
 
           <p className="text-gray-500">
-            ✅ Sem cartão de crédito <span className="mx-2">•</span> 
-            ✅ Setup em 2 minutos <span className="mx-2">•</span> 
+            ✅ Sem cartão de crédito <span className="mx-2">•</span>
+            ✅ Setup em 2 minutos <span className="mx-2">•</span>
             ✅ Cancele quando quiser
           </p>
         </div>
@@ -240,7 +241,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
               ))}
             </ul>
 
-            <button 
+            <button
               onClick={onStart}
               className="w-full bg-brand-600 text-white py-4 rounded-xl font-black text-xl hover:bg-brand-700 transition-all"
             >
@@ -277,7 +278,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           <p className="text-xl text-brand-100 mb-8">
             Crie sua página de links em menos de 2 minutos
           </p>
-          <button 
+          <button
             onClick={onStart}
             className="bg-white text-brand-600 px-10 py-5 rounded-2xl font-black text-xl hover:scale-105 transition-all shadow-xl"
           >
@@ -292,24 +293,6 @@ function LandingPage({ onStart }: { onStart: () => void }) {
       {/* Footer */}
       <footer className="py-8 bg-gray-900 text-gray-400 text-center">
         <p>© 2026 LinkFácil. Feito com ❤️ no Brasil 🇧🇷</p>
-      </footer>
-    </div>
-  )
-}
-        
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-          <button onClick={onStart} className="bg-brand-600 text-white px-8 py-4 rounded-2xl font-black text-lg hover:bg-brand-700 hover:scale-105 transition-all shadow-xl shadow-brand-500/30">
-            Começar Grátis
-          </button>
-        </div>
-
-        <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full font-bold">
-          <span className="text-2xl">R$ 9,90</span>
-          <span className="text-sm">/mês</span>
-          <span className="bg-green-200 px-2 py-1 rounded text-xs">vs R$ 45 do Linktree</span>
-        </div>
-      </section>
-
       </footer>
     </div>
   )
@@ -420,7 +403,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   async function addLink() {
     if (!newLink.title || !newLink.url) return
     setLoading(true)
-    
+
     const { data, error } = await supabase
       .from('links')
       .insert([{
@@ -431,7 +414,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
         position: links.length
       }])
       .select()
-    
+
     if (!error && data) {
       setLinks([...links, data[0] as Link])
       setNewLink({ title: '', url: '', type: 'link' })
@@ -489,7 +472,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                 type="text"
                 placeholder="Nome"
                 value={profile.name}
-                onChange={(e) => setProfile({...profile, name: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                 onBlur={updateProfile}
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
               />
@@ -497,14 +480,14 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                 type="text"
                 placeholder="/@seu-link"
                 value={profile.slug}
-                onChange={(e) => setProfile({...profile, slug: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, slug: e.target.value })}
                 onBlur={updateProfile}
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
               />
               <textarea
                 placeholder="Bio"
                 value={profile.bio}
-                onChange={(e) => setProfile({...profile, bio: e.target.value})}
+                onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
                 onBlur={updateProfile}
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
                 rows={2}
@@ -515,7 +498,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
           {/* Links */}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Seus Links ({links.length})</h2>
-            
+
             <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
               {links.map((link, idx) => (
                 <div key={link.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl">
@@ -539,14 +522,14 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                 type="text"
                 placeholder="Título"
                 value={newLink.title}
-                onChange={(e) => setNewLink({...newLink, title: e.target.value})}
+                onChange={(e) => setNewLink({ ...newLink, title: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
               />
               <input
                 type="text"
                 placeholder="URL"
                 value={newLink.url}
-                onChange={(e) => setNewLink({...newLink, url: e.target.value})}
+                onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
               />
               <button
@@ -566,7 +549,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               type="text"
               placeholder="Chave PIX (CPF, CNPJ, Email ou Celular)"
               value={profile.pix_key || ''}
-              onChange={(e) => setProfile({...profile, pix_key: e.target.value})}
+              onChange={(e) => setProfile({ ...profile, pix_key: e.target.value })}
               onBlur={updateProfile}
               className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none"
             />
@@ -574,7 +557,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               <input
                 type="checkbox"
                 checked={profile.pix_enabled}
-                onChange={(e) => setProfile({...profile, pix_enabled: e.target.checked})}
+                onChange={(e) => setProfile({ ...profile, pix_enabled: e.target.checked })}
                 onBlur={updateProfile}
                 className="w-4 h-4"
               />
@@ -609,7 +592,7 @@ function PhonePreview({ profile, links }: { profile: User, links: Link[] }) {
           <h3 className="font-bold text-xl">{profile.name || 'Seu Nome'}</h3>
           <p className="text-brand-100 text-sm mt-1">{profile.bio || 'Sua bio aqui'}</p>
         </div>
-        
+
         <div className="p-4 space-y-3">
           {links.filter(l => l.active).map((link) => (
             <a
@@ -622,19 +605,19 @@ function PhonePreview({ profile, links }: { profile: User, links: Link[] }) {
               {link.title}
             </a>
           ))}
-          
+
           {profile.pix_enabled && profile.pix_key && (
             <button className="w-full bg-green-500 hover:bg-green-600 text-white py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-2">
               <CreditCard className="w-5 h-5" />
               Pagar com PIX
             </button>
           )}
-          
+
           {links.length === 0 && (
             <p className="text-center text-gray-400 py-8">Adicione seus links!</p>
           )}
         </div>
-        
+
         <div className="p-4 text-center">
           <p className="text-xs text-gray-400">feito com LinkFácil</p>
         </div>
@@ -644,12 +627,12 @@ function PhonePreview({ profile, links }: { profile: User, links: Link[] }) {
 }
 
 // PIX Payment Modal
-function PixModal({ 
-  isOpen, 
-  onClose, 
-  pixKey, 
-  merchantName 
-}: { 
+function PixModal({
+  isOpen,
+  onClose,
+  pixKey,
+  merchantName
+}: {
   isOpen: boolean
   onClose: () => void
   pixKey: string
@@ -759,19 +742,19 @@ function PublicPage({ slug }: { slug: string }) {
         .select('*')
         .eq('slug', slug)
         .single()
-      
+
       if (profileData) {
         setProfile(profileData as User)
-        
+
         const { data: linksData } = await supabase
           .from('links')
           .select('*')
           .eq('user_id', profileData.id)
           .eq('active', true)
           .order('position')
-        
+
         if (linksData) setLinks(linksData as Link[])
-        
+
         // Track view
         await supabase.from('page_views').insert([{ user_id: profileData.id }])
       }
@@ -806,9 +789,9 @@ function PublicPage({ slug }: { slug: string }) {
               {link.title}
             </a>
           ))}
-          
+
           {profile.pix_enabled && profile.pix_key && (
-            <button 
+            <button
               onClick={() => setPixModalOpen(true)}
               className="w-full bg-green-500 hover:bg-green-600 text-white py-4 px-6 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2"
             >
@@ -867,12 +850,12 @@ function App() {
       {page === 'landing' && <LandingPage onStart={() => setPage('auth')} />}
       {page === 'auth' && <AuthPage onAuth={() => setPage('dashboard')} />}
       {page === 'dashboard' && user && (
-        <Dashboard 
-          user={user} 
+        <Dashboard
+          user={user}
           onLogout={() => {
             supabase.auth.signOut()
             setPage('landing')
-          }} 
+          }}
         />
       )}
     </div>
