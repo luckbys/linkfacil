@@ -15,6 +15,7 @@ export default {
           700: '#0369a1',
           900: '#0c4a6e',
         },
+        border: '#e5e7eb', // gray-200 equivalent
       },
     },
   },

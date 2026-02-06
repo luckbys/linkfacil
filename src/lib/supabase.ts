@@ -29,6 +29,11 @@ export interface Link {
   clicks: number
   position: number
   active: boolean
+  highlight?: 'pulse' | 'shine' | 'shake' | 'glow' | 'featured' | null
+  scheduled_start?: string | null
+  scheduled_end?: string | null
+  is_embed?: boolean
+  embed_html?: string | null
   created_at: string
 }
 

@@ -52,7 +52,8 @@ function buildPixPayload(data: {
   const { key, amount, merchantName, merchantCity } = data
 
   // EMV QR Code fields
-  const idPayloadFormat = '01' // Payload Format Indicator
+  const idPayloadFormat = '00' // Payload Format Indicator (Obrigatório ser '00')
+  const idPointOfInitiation = '01' // Point of Initiation Method
   const idMerchantAccount = '26' // Merchant Account Information (GUI + PIX key)
   const idMerchantCategory = '52' // Merchant Category Code (default: 0000)
   const idTransactionCurrency = '53' // Transaction Currency (986 = BRL)
@@ -69,7 +70,8 @@ function buildPixPayload(data: {
     '01' + String(key.length).padStart(2, '0') + key
 
   let payload =
-    idPayloadFormat + '02' + '01' + // Payload Format: 01
+    idPayloadFormat + '02' + '01' + // Payload Format: 01 (EMV QRCPS-01)
+    idPointOfInitiation + '02' + '11' + // Point of Initiation: 11 (Static QR)
     idMerchantAccount + String(merchantAccount.length).padStart(2, '0') + merchantAccount +
     idMerchantCategory + '04' + '0000' // Merchant Category Code: 0000
 
