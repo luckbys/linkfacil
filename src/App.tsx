@@ -480,7 +480,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 
       {/* Footer */}
       <footer className="py-8 bg-gray-900 text-gray-400 text-center">
-        <p>© 2026 LinkFácil. Feito com ❤️ no Brasil 🇧🇷</p>
+        <p>© 2026 LinkDou. Feito com ❤️ no Brasil 🇧🇷</p>
       </footer>
     </div>
   )
@@ -893,7 +893,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             <div className="w-10 h-10 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-sky-500/20">
               <Link2 className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">LinkFácil</span>
+            <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">LinkDou</span>
           </div>
 
           <div className="flex items-center gap-3">
