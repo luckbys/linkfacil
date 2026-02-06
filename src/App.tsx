@@ -678,7 +678,6 @@ function AnalyticsDashboard({ userId, links }: { userId: string, links: Link[] }
   }
 
   const maxDayViews = Math.max(...stats.viewsByDay.map(d => d.count), 1)
-  const totalDevices = stats.deviceStats.mobile + stats.deviceStats.desktop || 1
 
   if (loading) {
     return (
@@ -1071,7 +1070,6 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                     const endDate = link.scheduled_end ? new Date(link.scheduled_end) : null
                     const isScheduled = startDate && startDate > now
                     const isExpired = endDate && endDate < now
-                    const isActive = !isScheduled && !isExpired
 
                     return (
                       <div key={link.id} className="p-4 sm:p-6 flex flex-col gap-3 group hover:bg-slate-50/50 transition-colors">
