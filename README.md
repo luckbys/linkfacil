@@ -1,6 +1,6 @@
 # LinkFácil 🚀
 
-Micro SaaS de páginas de links para o mercado brasileiro. Concorrente direto do Linktree, mas com **PIX integrado**, **temas brasileiros** e **preço acessível**.
+Micro SaaS de páginas de links para o mercado brasileiro. Concorrente direto do Linktree, mas com **PIX integrado**, **temas** e **preço acessível**.
 
 ## 💰 Modelo de Negócio
 

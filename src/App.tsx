@@ -532,8 +532,8 @@ function AuthPage({ onAuth }: { onAuth: () => void }) {
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white flex items-center justify-center p-6">
       <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Link2 className="w-8 h-8 text-white" />
+          <div className="w-24 h-24 mx-auto mb-4 flex items-center justify-center">
+            <img src="/logo.png" alt="LinkDou Logo" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-black">{isLogin ? 'Entrar' : 'Criar Conta'}</h1>
           <p className="text-gray-500">{isLogin ? 'Bem-vindo de volta!' : 'Comece gratuitamente'}</p>
@@ -890,9 +890,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
       <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-sky-500/20">
-              <Link2 className="w-6 h-6 text-white" />
-            </div>
+            <img src="/logo.png" alt="LinkDou" className="w-10 h-10 object-contain" />
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">LinkDou</span>
           </div>
 
