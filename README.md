@@ -32,6 +32,33 @@ Micro SaaS de páginas de links para o mercado brasileiro. Concorrente direto do
 - [ ] Domínio personalizado
 - [ ] API para desenvolvedores
 
+
+## 💳 Assinaturas e Webhooks
+
+O projeto agora inclui base de billing com Supabase + Stripe:
+
+- Migration: `supabase/migrations/007_billing_subscriptions.sql`
+- Edge Function (checkout): `supabase/functions/create-checkout-session/index.ts`
+- Edge Function (webhook): `supabase/functions/billing-webhook/index.ts`
+
+### Variáveis necessárias (Edge Functions)
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRO_PRICE_ID`
+- `STRIPE_BUSINESS_PRICE_ID`
+- `APP_URL`
+
+### Estados de assinatura
+- `trialing`
+- `active`
+- `past_due`
+- `canceled`
+
+A tabela `subscriptions` sincroniza automaticamente o plano/status do usuário no `profiles` via trigger SQL.
+
 ## 🛠️ Tecnologias
 
 - **Frontend**: React + TypeScript + Vite
