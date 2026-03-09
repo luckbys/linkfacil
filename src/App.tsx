@@ -8,7 +8,8 @@ import {
   Link2, CreditCard, Smartphone, Palette, BarChart3,
   ChevronRight, Check, LogOut,
   Trash2, GripVertical, Plus, Copy, CheckCircle, X, ShieldCheck,
-  Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play
+  Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play,
+  Crown, Rocket, Building2, ExternalLink
 } from 'lucide-react'
 
 // Embed Helper Functions
@@ -179,6 +180,45 @@ function useAuth() {
 
 // Landing Page - Optimized with landing-page-generator skill
 function LandingPage({ onStart }: { onStart: () => void }) {
+  const whatsappNumber = import.meta.env.VITE_SALES_WHATSAPP || '5511999999999'
+  const salesEmail = import.meta.env.VITE_SALES_EMAIL || 'vendas@linkfacil.app'
+  const checkoutUrl = import.meta.env.VITE_CHECKOUT_URL || ''
+  const contactMessage = encodeURIComponent('Olá! Quero contratar o LinkFácil para meu negócio. Pode me ajudar a escolher o melhor plano?')
+  const plans = [
+    {
+      name: 'Start',
+      subtitle: 'Para quem está começando',
+      monthly: 'R$ 0',
+      cta: 'Criar conta grátis',
+      action: onStart,
+      featured: false,
+      icon: Rocket,
+      highlights: ['Até 8 links', 'Tema padrão', 'QR Code básico', 'Suporte por email'],
+    },
+    {
+      name: 'Pro',
+      subtitle: 'Para profissionais e creators',
+      monthly: 'R$ 29,90',
+      annual: 'R$ 24,90/mês no anual',
+      cta: 'Assinar Plano Pro',
+      action: () => window.open(`https://wa.me/${whatsappNumber}?text=${contactMessage}`, '_blank'),
+      featured: true,
+      icon: Crown,
+      highlights: ['Links ilimitados', 'PIX integrado', 'Botão WhatsApp avançado', 'Analytics completo', 'Temas premium', 'Suporte prioritário'],
+    },
+    {
+      name: 'Business',
+      subtitle: 'Para equipes e agências',
+      monthly: 'R$ 79,90',
+      annual: 'R$ 69,90/mês no anual',
+      cta: 'Falar com especialista',
+      action: () => window.open(`mailto:${salesEmail}?subject=Plano%20Business%20LinkF%C3%A1cil`, '_blank'),
+      featured: false,
+      icon: Building2,
+      highlights: ['Tudo do Pro', 'Múltiplos usuários', 'Domínio personalizado', 'Relatórios exportáveis', 'Onboarding guiado'],
+    },
+  ]
+
   const benefits = [
     { icon: CreditCard, text: 'Receba pagamentos via PIX direto na página' },
     { icon: Smartphone, text: 'Botão de WhatsApp com mensagem personalizada' },
@@ -294,10 +334,10 @@ function LandingPage({ onStart }: { onStart: () => void }) {
           <div className="inline-flex flex-col md:flex-row items-center gap-4 text-lg md:text-xl font-medium">
             <span className="text-slate-400">Linktree cobra: <span className="line-through decoration-red-500/50">R$ 45/mês</span></span>
             <span className="hidden md:inline text-slate-700">|</span>
-            <span className="text-sky-400 font-bold bg-sky-400/10 px-4 py-1 rounded-full border border-sky-400/20">LinkFácil: R$ 9,90/mês</span>
+            <span className="text-sky-400 font-bold bg-sky-400/10 px-4 py-1 rounded-full border border-sky-400/20">LinkFácil Pro: R$ 29,90/mês</span>
             <span className="hidden md:inline text-slate-700">|</span>
             <span className="text-emerald-400 font-bold flex items-center gap-2">
-              Economize 78%
+              Economize até 34%
               <span className="text-2xl">💰</span>
             </span>
           </div>
@@ -394,49 +434,101 @@ function LandingPage({ onStart }: { onStart: () => void }) {
       {/* Pricing Section */}
       <section className="section-padding bg-white relative overflow-hidden">
         <div className="absolute inset-0 bg-dot-pattern opacity-30"></div>
-        <div className="max-w-4xl mx-auto px-6 relative z-10">
+        <div className="max-w-6xl mx-auto px-6 relative z-10">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-6 tracking-tight">Preço Simples e Transparente</h2>
             <p className="text-xl text-slate-600 leading-relaxed text-balance">Sem taxas escondidas. Cancele quando quiser.</p>
           </div>
 
-          <div className="bg-white rounded-[2rem] shadow-2xl shadow-sky-900/10 p-8 md:p-12 text-center border border-slate-100 relative overflow-hidden max-w-lg mx-auto transform hover:-translate-y-1 transition-all duration-300">
-            <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-sky-400 via-blue-500 to-emerald-500"></div>
-            <div className="absolute top-6 right-6">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700 uppercase tracking-wide">
-                Mais Popular
-              </span>
-            </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {plans.map((plan) => {
+              const Icon = plan.icon
+              return (
+                <div key={plan.name} className={`bg-white rounded-3xl p-8 border relative overflow-hidden transition-all duration-300 ${plan.featured ? 'shadow-2xl shadow-sky-900/10 border-sky-200 scale-[1.02]' : 'shadow-sm border-slate-100 hover:-translate-y-1'}`}>
+                  {plan.featured && (
+                    <>
+                      <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-sky-400 via-blue-500 to-emerald-500"></div>
+                      <div className="absolute top-6 right-6">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-700 uppercase tracking-wide">
+                          Mais Popular
+                        </span>
+                      </div>
+                    </>
+                  )}
 
-            <div className="text-sm text-sky-600 font-bold uppercase tracking-widest mb-2">Plano Pro</div>
-            <div className="flex items-baseline justify-center gap-1 mb-8">
-              <span className="text-slate-400 line-through text-lg relative top-[-0.5rem] mr-2">R$ 19,90</span>
-              <span className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">R$ 9,90</span>
-              <span className="text-slate-500 font-medium">/mês</span>
-            </div>
-
-            <ul className="space-y-4 text-left mx-auto mb-10 max-w-xs md:max-w-sm">
-              {['Links ilimitados', 'PIX integrado', 'Botão WhatsApp', 'Estatísticas básicas', 'Temas premium', 'Suporte prioritário'].map((item, idx) => (
-                <li key={idx} className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <Check className="w-3 h-3 text-emerald-600" />
+                  <div className="inline-flex w-10 h-10 rounded-xl bg-sky-100 text-sky-700 items-center justify-center mb-4">
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <span className="text-slate-700 font-medium">{item}</span>
-                </li>
-              ))}
-            </ul>
+                  <div className="text-sm text-sky-600 font-bold uppercase tracking-widest mb-2">Plano {plan.name}</div>
+                  <p className="text-slate-600 text-sm mb-4">{plan.subtitle}</p>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-4xl font-extrabold text-slate-900 tracking-tight">{plan.monthly}</span>
+                    <span className="text-slate-500 font-medium">/mês</span>
+                  </div>
+                  {plan.annual && <p className="text-sm text-emerald-700 mb-6">{plan.annual}</p>}
 
-            <button
-              onClick={onStart}
-              className="w-full btn-primary text-lg py-4 shadow-xl shadow-sky-500/20"
-            >
-              Começar Agora
-            </button>
+                  <ul className="space-y-3 text-left mb-8">
+                    {plan.highlights.map((item) => (
+                      <li key={item} className="flex items-center gap-3">
+                        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                        </div>
+                        <span className="text-slate-700 font-medium text-sm">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
 
-            <p className="text-xs text-slate-400 mt-6 flex items-center justify-center gap-2">
-              <ShieldCheck className="w-4 h-4" />
-              7 dias de garantia incondicional
-            </p>
+                  <button
+                    onClick={plan.action}
+                    className={`w-full text-base py-3 rounded-xl font-semibold transition ${plan.featured ? 'btn-primary shadow-xl shadow-sky-500/20' : 'bg-slate-900 text-white hover:bg-slate-800'}`}
+                  >
+                    {plan.cta}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <p className="text-xs text-slate-400 mt-8 flex items-center justify-center gap-2">
+            <ShieldCheck className="w-4 h-4" />
+            7 dias de garantia incondicional nos planos pagos
+          </p>
+        </div>
+      </section>
+
+      <section className="pb-20 bg-white">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="bg-slate-900 rounded-3xl p-8 md:p-12 text-white">
+            <h3 className="text-2xl md:text-3xl font-bold mb-3">Integração para contratação em 3 canais</h3>
+            <p className="text-slate-300 mb-8">Facilitamos o fechamento para quem quer contratar agora: WhatsApp, email comercial e checkout dedicado.</p>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <a href={`https://wa.me/${whatsappNumber}?text=${contactMessage}`} target="_blank" rel="noreferrer" className="rounded-2xl bg-white/10 border border-white/10 p-5 hover:bg-white/20 transition">
+                <MessageCircle className="w-5 h-5 mb-3" />
+                <p className="font-semibold mb-1">WhatsApp Comercial</p>
+                <p className="text-sm text-slate-300">Atendimento imediato para tirar dúvidas e fechar plano.</p>
+              </a>
+
+              <a href={`mailto:${salesEmail}?subject=Quero%20contratar%20o%20LinkF%C3%A1cil`} className="rounded-2xl bg-white/10 border border-white/10 p-5 hover:bg-white/20 transition">
+                <Mail className="w-5 h-5 mb-3" />
+                <p className="font-semibold mb-1">Email de Vendas</p>
+                <p className="text-sm text-slate-300">Canal para propostas corporativas e times.</p>
+              </a>
+
+              {checkoutUrl ? (
+                <a href={checkoutUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-white/10 border border-white/10 p-5 hover:bg-white/20 transition">
+                  <ExternalLink className="w-5 h-5 mb-3" />
+                  <p className="font-semibold mb-1">Checkout Integrado</p>
+                  <p className="text-sm text-slate-300">Assine online em menos de 2 minutos com cartão ou PIX.</p>
+                </a>
+              ) : (
+                <div className="rounded-2xl bg-white/10 border border-white/10 p-5 opacity-80">
+                  <ExternalLink className="w-5 h-5 mb-3" />
+                  <p className="font-semibold mb-1">Checkout Integrado</p>
+                  <p className="text-sm text-slate-300">Em implantação. Configure a variável <code>VITE_CHECKOUT_URL</code> para ativar.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -480,7 +572,7 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 
       {/* Footer */}
       <footer className="py-8 bg-gray-900 text-gray-400 text-center">
-        <p>© 2026 LinkDou. Feito com ❤️ no Brasil 🇧🇷</p>
+        <p>© 2026 LinkFácil. Feito com ❤️ no Brasil 🇧🇷</p>
       </footer>
     </div>
   )
@@ -791,6 +883,39 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [copied, setCopied] = useState(false)
   const [showMobilePreview, setShowMobilePreview] = useState(false)
 
+  const checkoutUrl = import.meta.env.VITE_CHECKOUT_URL || ''
+  const salesWhatsapp = import.meta.env.VITE_SALES_WHATSAPP || '5511999999999'
+  const planType = profile.plan_type || 'start'
+  const subscriptionStatus = profile.subscription_status || 'inactive'
+  const paidPlanActive = ['pro', 'business'].includes(planType) && ['active', 'trialing', 'past_due'].includes(subscriptionStatus)
+  const maxLinks = paidPlanActive ? Infinity : 8
+  const linkLimitReached = links.length >= maxLinks
+
+  async function goToUpgrade(plan: 'pro' | 'business' = 'pro') {
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { plan },
+      })
+
+      if (!error && data?.checkout_url) {
+        window.open(data.checkout_url, '_blank')
+        return
+      }
+    } catch (_err) {
+      // fallback channels below
+    }
+
+    if (checkoutUrl) {
+      const separator = checkoutUrl.includes('?') ? '&' : '?'
+      const url = `${checkoutUrl}${separator}email=${encodeURIComponent(profile.email)}&plan=${plan}`
+      window.open(url, '_blank')
+      return
+    }
+
+    const msg = encodeURIComponent(`Olá! Quero fazer upgrade para o plano ${plan.toUpperCase()}. Meu email: ${profile.email}`)
+    window.open(`https://wa.me/${salesWhatsapp}?text=${msg}`, '_blank')
+  }
+
   useEffect(() => {
     fetchLinks()
   }, [])
@@ -806,6 +931,11 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
   async function addLink() {
     if (!newLink.title || !newLink.url) return
+    if (linkLimitReached) {
+      alert('Você atingiu o limite do plano Start. Faça upgrade para adicionar mais links.')
+      return
+    }
+
     setLoading(true)
 
     const detectedType = detectLinkType(newLink.url)
@@ -824,6 +954,8 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
     if (!error && data) {
       setLinks([...links, data[0] as Link])
       setNewLink({ title: '', url: '', type: 'link' })
+    } else if (error) {
+      alert(error.message || 'Não foi possível adicionar o link')
     }
     setLoading(false)
   }
@@ -934,7 +1066,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seu Perfil</h2>
                 <div className="px-2 sm:px-3 py-1 bg-sky-50 text-sky-600 text-xs font-bold rounded-full uppercase tracking-wider">
-                  Básico
+                  {planType === 'business' ? 'Business' : planType === 'pro' ? 'Pro' : 'Start'}
                 </div>
               </div>
 
@@ -1038,6 +1170,19 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
             {/* Analytics Section */}
             <AnalyticsDashboard userId={user.id} links={links} />
+
+
+            {linkLimitReached && (
+              <section className="dash-card p-5 sm:p-6 border border-amber-200 bg-amber-50/70">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-amber-900">Você atingiu o limite do plano Start</h3>
+                    <p className="text-sm text-amber-800">Faça upgrade para o Pro e publique links ilimitados, analytics completo e recursos premium.</p>
+                  </div>
+                  <button onClick={() => goToUpgrade('pro')} className="btn-primary px-5 py-3 text-sm">Fazer Upgrade</button>
+                </div>
+              </section>
+            )}
 
             {/* Links Editor Section */}
             <section className="dash-card p-0 overflow-hidden">
@@ -1219,7 +1364,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                 </div>
                 <button
                   onClick={addLink}
-                  disabled={loading || !newLink.title || !newLink.url}
+                  disabled={loading || !newLink.title || !newLink.url || linkLimitReached}
                   className="w-full btn-primary py-3 rounded-xl disabled:opacity-50 disabled:grayscale"
                 >
                   {loading ? 'Adicionando...' : (
