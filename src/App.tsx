@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react'
+import DOMPurify from 'dompurify'
 import './index.css'
 import { supabase } from './lib/supabase'
 import type { User, Link } from './lib/supabase'
 import { generatePixPayload, getPixQrCodeUrl } from './lib/pix'
 import { detectLinkType, getFaviconUrl } from './lib/icons'
+import { PLANS, FREE_THEMES, isPro, canAddMoreLinks } from './lib/plans'
+import { createCheckoutSession, logSubscriptionEvent } from './lib/stripe'
 import {
   Link2, CreditCard, Smartphone, Palette, BarChart3,
   ChevronRight, Check, LogOut,
   Trash2, GripVertical, Plus, Copy, CheckCircle, X, ShieldCheck,
-  Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play
+  Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play,
+  Crown, Zap, Lock, Star
 } from 'lucide-react'
 
 // Embed Helper Functions
@@ -35,12 +39,17 @@ function getTikTokVideoId(url: string): string | null {
 function SocialEmbed({ url, embedHtml }: { url: string; embedHtml?: string | null }) {
   const embedType = getEmbedType(url)
 
-  // Custom HTML embed (for Instagram)
+  // Custom HTML embed (for Instagram) - sanitized to prevent XSS
   if (embedHtml) {
+    const sanitizedHtml = DOMPurify.sanitize(embedHtml, {
+      ADD_TAGS: ['iframe', 'blockquote'],
+      ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'data-instgrm-permalink', 'data-instgrm-version'],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+    })
     return (
       <div
         className="social-embed w-full rounded-xl overflow-hidden bg-white shadow-md"
-        dangerouslySetInnerHTML={{ __html: embedHtml }}
+        dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
       />
     )
   }
@@ -128,7 +137,6 @@ function useAuth() {
   }, [])
 
   async function fetchProfile(userId: string) {
-    console.log('Fetching profile for:', userId)
     let { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -137,7 +145,6 @@ function useAuth() {
 
     // Se o perfil não existe (erro PGRST116), vamos criar um
     if (error && error.code === 'PGRST116') {
-      console.log('Profile missing, creating default profile...')
 
       // Pegamos os detalhes do usuário atual da sessão
       const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -156,19 +163,13 @@ function useAuth() {
           .select()
           .single()
 
-        if (createError) {
-          console.error('Error creating default profile:', createError)
-        } else {
-          console.log('Created default profile:', newProfile)
+        if (!createError) {
           data = newProfile
         }
       }
-    } else if (error) {
-      console.error('Error fetching profile:', error)
     }
 
     if (data) {
-      console.log('Final profile set:', data)
       setUser(data as User)
     }
     setLoading(false)
@@ -501,27 +502,22 @@ function AuthPage({ onAuth }: { onAuth: () => void }) {
 
     try {
       if (isLogin) {
-        console.log('Attempting login for:', email)
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        console.log('Login successful:', data)
       } else {
-        console.log('Attempting signup for:', email)
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
-              name: email.split('@')[0], // Nome padrão baseado no email
+              name: email.split('@')[0],
             }
           }
         })
         if (error) throw error
-        console.log('Signup successful:', data)
       }
       onAuth()
     } catch (err: any) {
-      console.error('Auth error:', err)
       setError(err.message || 'Erro na autenticação')
     } finally {
       setLoading(false)
@@ -782,6 +778,131 @@ function AnalyticsDashboard({ userId, links }: { userId: string, links: Link[] }
   )
 }
 
+// Pro Badge Component
+function PlanBadge({ plan }: { plan: string }) {
+  if (plan === 'pro') {
+    return (
+      <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 text-xs font-bold rounded-full uppercase tracking-wider border border-amber-200">
+        <Crown className="w-3 h-3" />
+        Pro
+      </div>
+    )
+  }
+  return (
+    <div className="px-2 sm:px-3 py-1 bg-slate-100 text-slate-500 text-xs font-bold rounded-full uppercase tracking-wider">
+      Free
+    </div>
+  )
+}
+
+// Upgrade CTA Component (inline)
+function UpgradeInline({ feature, onUpgrade }: { feature: string, onUpgrade: () => void }) {
+  return (
+    <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl">
+      <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+      <p className="text-xs text-amber-700 flex-1">
+        <strong>{feature}</strong> é uma funcionalidade Pro.
+      </p>
+      <button
+        onClick={onUpgrade}
+        className="text-xs font-bold text-amber-700 bg-amber-200 hover:bg-amber-300 px-3 py-1 rounded-lg transition-colors whitespace-nowrap"
+      >
+        Upgrade
+      </button>
+    </div>
+  )
+}
+
+// Upgrade Modal Component
+function UpgradeModal({ isOpen, onClose, userId, email }: { isOpen: boolean, onClose: () => void, userId: string, email: string }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!isOpen) return null
+
+  async function handleUpgrade() {
+    setLoading(true)
+    setError('')
+    try {
+      await logSubscriptionEvent(userId, 'checkout_started')
+      const checkoutUrl = await createCheckoutSession(userId, email)
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl
+      } else {
+        setError('Pagamento ainda não configurado. Entre em contato pelo WhatsApp para assinar o plano Pro.')
+      }
+    } catch {
+      setError('Erro ao iniciar pagamento. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-center">
+          <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white p-1">
+            <X className="w-5 h-5" />
+          </button>
+          <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
+            <Crown className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Upgrade para Pro</h2>
+          <p className="text-slate-300 text-sm">Desbloqueie todo o potencial do LinkFácil</p>
+        </div>
+
+        {/* Pricing */}
+        <div className="p-8">
+          <div className="text-center mb-6">
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-slate-400 line-through text-sm mr-2">R$ 19,90</span>
+              <span className="text-4xl font-extrabold text-slate-900">R$ 9,90</span>
+              <span className="text-slate-500">/mês</span>
+            </div>
+            <p className="text-xs text-emerald-600 font-bold mt-1">Economize 50% - Oferta de lançamento</p>
+          </div>
+
+          {/* Features */}
+          <div className="space-y-3 mb-8">
+            {PLANS.pro.features.map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-3">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                </div>
+                <span className="text-sm text-slate-700">{feature}</span>
+              </div>
+            ))}
+          </div>
+
+          {error && (
+            <div className="bg-red-50 text-red-700 p-3 rounded-xl mb-4 text-sm text-center">{error}</div>
+          )}
+
+          <button
+            onClick={handleUpgrade}
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? 'Processando...' : (
+              <>
+                <Zap className="w-5 h-5" />
+                Assinar Pro Agora
+              </>
+            )}
+          </button>
+
+          <p className="text-xs text-slate-400 mt-4 text-center flex items-center justify-center gap-2">
+            <ShieldCheck className="w-4 h-4" />
+            7 dias de garantia • Cancele quando quiser
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Dashboard
 function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [links, setLinks] = useState<Link[]>([])
@@ -790,6 +911,21 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showMobilePreview, setShowMobilePreview] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+
+  const userPlan = profile.plan || 'free'
+  const userIsPro = isPro(userPlan)
+
+  // Check for upgrade success in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('upgrade') === 'success') {
+      // Update local state optimistically
+      setProfile(prev => ({ ...prev, plan: 'pro', subscription_status: 'active' }))
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   useEffect(() => {
     fetchLinks()
@@ -806,6 +942,12 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
   async function addLink() {
     if (!newLink.title || !newLink.url) return
+
+    if (!canAddMoreLinks(userPlan, links.length)) {
+      setShowUpgradeModal(true)
+      return
+    }
+
     setLoading(true)
 
     const detectedType = detectLinkType(newLink.url)
@@ -895,6 +1037,18 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
           </div>
 
           <div className="flex items-center gap-3">
+            {!userIsPro && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-sm shadow-amber-500/20"
+              >
+                <Crown className="w-4 h-4" />
+                <span className="hidden sm:inline">Upgrade Pro</span>
+              </button>
+            )}
+            {userIsPro && (
+              <PlanBadge plan="pro" />
+            )}
             <button
               onClick={copyLink}
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-medium transition-all group active:scale-95"
@@ -933,9 +1087,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             <section className="dash-card p-4 sm:p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seu Perfil</h2>
-                <div className="px-2 sm:px-3 py-1 bg-sky-50 text-sky-600 text-xs font-bold rounded-full uppercase tracking-wider">
-                  Básico
-                </div>
+                <PlanBadge plan={userPlan} />
               </div>
 
               <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
@@ -1016,23 +1168,36 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {themes.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={async () => {
-                      const updated = { ...profile, theme: t.id }
-                      setProfile(updated)
-                      await supabase.from('profiles').update({ theme: t.id }).eq('id', user.id)
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all text-left group ${profile.theme === t.id ? 'border-sky-500 bg-sky-50/50' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
-                  >
-                    <div className="flex gap-1 mb-3">
-                      <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[0] }} />
-                      <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[1] }} />
-                    </div>
-                    <span className={`text-sm font-bold ${profile.theme === t.id ? 'text-sky-700' : 'text-slate-600'}`}>{t.name}</span>
-                  </button>
-                ))}
+                {themes.map((t) => {
+                  const isLocked = !userIsPro && !FREE_THEMES.includes(t.id)
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={async () => {
+                        if (isLocked) {
+                          setShowUpgradeModal(true)
+                          return
+                        }
+                        const updated = { ...profile, theme: t.id }
+                        setProfile(updated)
+                        await supabase.from('profiles').update({ theme: t.id }).eq('id', user.id)
+                      }}
+                      className={`p-4 rounded-2xl border-2 transition-all text-left group relative ${profile.theme === t.id ? 'border-sky-500 bg-sky-50/50' : 'border-slate-100 hover:border-slate-200 bg-white'} ${isLocked ? 'opacity-75' : ''}`}
+                    >
+                      {isLocked && (
+                        <div className="absolute top-2 right-2">
+                          <Lock className="w-3.5 h-3.5 text-amber-500" />
+                        </div>
+                      )}
+                      <div className="flex gap-1 mb-3">
+                        <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[0] }} />
+                        <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[1] }} />
+                      </div>
+                      <span className={`text-sm font-bold ${profile.theme === t.id ? 'text-sky-700' : 'text-slate-600'}`}>{t.name}</span>
+                      {isLocked && <span className="block text-[10px] text-amber-500 font-bold mt-0.5">PRO</span>}
+                    </button>
+                  )
+                })}
               </div>
             </section>
 
@@ -1046,8 +1211,13 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                   <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seus Links</h2>
                   <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Gerencie seus destinos</p>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-sm sm:text-base">
-                  {links.length}
+                <div className="flex items-center gap-2">
+                  {!userIsPro && (
+                    <span className="text-[10px] text-slate-400 font-medium">{links.length}/{PLANS.free.maxLinks}</span>
+                  )}
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-sm sm:text-base">
+                    {links.length}
+                  </div>
                 </div>
               </div>
 
@@ -1092,34 +1262,49 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
                           {/* Controls - always visible on mobile, hover on desktop */}
                           <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                            {/* Highlight selector */}
-                            <select
-                              value={link.highlight || ''}
-                              onChange={async (e) => {
-                                const highlight = e.target.value || null
-                                await supabase.from('links').update({ highlight }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, highlight: highlight as any } : l))
-                              }}
-                              className="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors"
-                              title="Animação de destaque"
-                            >
-                              <option value="">Sem destaque</option>
-                              <option value="pulse">✨ Pulso</option>
-                              <option value="shine">💫 Brilho</option>
-                              <option value="shake">👀 Shake</option>
-                              <option value="glow">🔵 Glow</option>
-                              <option value="featured">⭐ Destaque</option>
-                            </select>
-                            {/* Embed toggle - only for YouTube/TikTok links */}
+                            {/* Highlight selector - Pro only */}
+                            {userIsPro ? (
+                              <select
+                                value={link.highlight || ''}
+                                onChange={async (e) => {
+                                  const highlight = e.target.value || null
+                                  await supabase.from('links').update({ highlight }).eq('id', link.id)
+                                  setLinks(links.map(l => l.id === link.id ? { ...l, highlight: highlight as any } : l))
+                                }}
+                                className="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors"
+                                title="Animação de destaque"
+                              >
+                                <option value="">Sem destaque</option>
+                                <option value="pulse">✨ Pulso</option>
+                                <option value="shine">💫 Brilho</option>
+                                <option value="shake">👀 Shake</option>
+                                <option value="glow">🔵 Glow</option>
+                                <option value="featured">⭐ Destaque</option>
+                              </select>
+                            ) : (
+                              <button
+                                onClick={() => setShowUpgradeModal(true)}
+                                className="text-xs bg-slate-100 hover:bg-amber-50 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors text-slate-400 hover:text-amber-600 flex items-center gap-1"
+                                title="Destaques - Pro"
+                              >
+                                <Star className="w-3 h-3" />
+                                <Lock className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                            {/* Embed toggle - Pro only, for YouTube/TikTok links */}
                             {(link.url.match(/youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/p\/|instagram\.com\/reel\//) && (
                               <button
                                 onClick={async () => {
+                                  if (!userIsPro) {
+                                    setShowUpgradeModal(true)
+                                    return
+                                  }
                                   const is_embed = !link.is_embed
                                   await supabase.from('links').update({ is_embed }).eq('id', link.id)
                                   setLinks(links.map(l => l.id === link.id ? { ...l, is_embed } : l))
                                 }}
-                                className={`p-2 rounded-lg transition-all ${link.is_embed ? 'bg-violet-100 text-violet-600' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'}`}
-                                title={link.is_embed ? 'Exibindo como embed' : 'Exibir como embed de vídeo'}
+                                className={`p-2 rounded-lg transition-all ${!userIsPro ? 'text-slate-300' : link.is_embed ? 'bg-violet-100 text-violet-600' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'}`}
+                                title={!userIsPro ? 'Embeds - Pro' : link.is_embed ? 'Exibindo como embed' : 'Exibir como embed de vídeo'}
                               >
                                 <Play className="w-4 h-4" />
                               </button>
@@ -1244,17 +1429,30 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                     <p className="text-sm text-slate-500">Receba direto na sua conta</p>
                   </div>
                 </div>
-                <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ${profile.pix_enabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
-                  onClick={() => {
-                    const nextVal = !profile.pix_enabled;
-                    setProfile({ ...profile, pix_enabled: nextVal });
-                    supabase.from('profiles').update({ pix_enabled: nextVal }).eq('id', user.id);
-                  }}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${profile.pix_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                </div>
+                {userIsPro ? (
+                  <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ${profile.pix_enabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                    onClick={() => {
+                      const nextVal = !profile.pix_enabled;
+                      setProfile({ ...profile, pix_enabled: nextVal });
+                      supabase.from('profiles').update({ pix_enabled: nextVal }).eq('id', user.id);
+                    }}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${profile.pix_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 text-xs font-bold rounded-full border border-amber-200 hover:bg-amber-100 transition-colors"
+                  >
+                    <Lock className="w-3 h-3" />
+                    Pro
+                  </button>
+                )}
               </div>
 
+              {!userIsPro ? (
+                <UpgradeInline feature="PIX integrado" onUpgrade={() => setShowUpgradeModal(true)} />
+              ) : (
               <div className="space-y-4">
                 <div className="space-y-1.5 text-center">
                   <div className="inline-block p-1 bg-emerald-100 rounded-lg text-emerald-700 text-[10px] font-bold uppercase tracking-wider mb-2">
@@ -1273,7 +1471,30 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                   Nós não cobramos taxas sobre suas vendas. O valor cai integralmente na conta vinculada à sua chave PIX.
                 </p>
               </div>
+              )}
             </section>
+
+            {/* Upgrade CTA for Free users */}
+            {!userIsPro && (
+              <section className="dash-card p-0 overflow-hidden">
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-center">
+                  <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
+                    <Crown className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Desbloqueie o plano Pro</h3>
+                  <p className="text-slate-400 text-sm mb-6 max-w-sm mx-auto">
+                    Links ilimitados, PIX integrado, todos os temas e muito mais por apenas <strong className="text-white">R$ 9,90/mês</strong>
+                  </p>
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 mx-auto"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Fazer Upgrade
+                  </button>
+                </div>
+              </section>
+            )}
           </div>
 
           {/* Preview Column */}
@@ -1321,6 +1542,14 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
           </div>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        userId={user.id}
+        email={user.email}
+      />
     </div>
   )
 }
