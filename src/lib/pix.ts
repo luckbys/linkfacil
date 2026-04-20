@@ -135,7 +135,7 @@ export function isValidPixKey(key: string): boolean {
   if (!key) return false
 
   // Remove spaces and special characters for validation
-  const clean = key.replace(/[\s\.\-]/g, '')
+  const clean = key.replace(/[\s\.\-\/]/g, '')
 
   // CPF: 11 digits
   if (/^\d{11}$/.test(clean)) return true
@@ -159,7 +159,7 @@ export function isValidPixKey(key: string): boolean {
  * Formats PIX key for display
  */
 export function formatPixKey(key: string): string {
-  const clean = key.replace(/[\s\.\-]/g, '')
+  const clean = key.replace(/[\s\.\-\/]/g, '')
 
   // Format CPF: XXX.XXX.XXX-XX
   if (clean.length === 11) {

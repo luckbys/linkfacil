@@ -1,9 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import DOMPurify from 'dompurify'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import './index.css'
 import { supabase } from './lib/supabase'
 import type { User, Link } from './lib/supabase'
-import { generatePixPayload, getPixQrCodeUrl } from './lib/pix'
+import { generatePixPayload, getPixQrCodeUrl, isValidPixKey } from './lib/pix'
 import { detectLinkType, getFaviconUrl } from './lib/icons'
 import { PLANS, FREE_THEMES, isPro, canAddMoreLinks } from './lib/plans'
 import { createCheckoutSession, logSubscriptionEvent } from './lib/stripe'
@@ -903,6 +920,194 @@ function UpgradeModal({ isOpen, onClose, userId, email }: { isOpen: boolean, onC
   )
 }
 
+// Sortable Link Item Component for drag-and-drop
+function SortableLinkItem({
+  link,
+  idx,
+  userIsPro,
+  links,
+  setLinks,
+  onDelete,
+  onShowUpgrade,
+}: {
+  link: Link
+  idx: number
+  userIsPro: boolean
+  links: Link[]
+  setLinks: (links: Link[]) => void
+  onDelete: (id: string) => void
+  onShowUpgrade: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: link.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.9 : undefined,
+  }
+
+  const now = new Date()
+  const startDate = link.scheduled_start ? new Date(link.scheduled_start) : null
+  const endDate = link.scheduled_end ? new Date(link.scheduled_end) : null
+  const isScheduled = startDate && startDate > now
+  const isExpired = endDate && endDate < now
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 sm:p-6 flex flex-col gap-3 group hover:bg-slate-50/50 transition-colors ${isDragging ? 'bg-white shadow-lg rounded-xl ring-2 ring-sky-200' : ''}`}
+    >
+      <div className="flex items-center gap-4">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-400 transition-colors touch-none"
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+
+        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors overflow-hidden p-2">
+          <LinkIcon type={link.type} url={link.url} className="w-full h-full" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx + 1}</span>
+            <p className="font-bold text-slate-900 truncate max-w-[150px] sm:max-w-none">{link.title}</p>
+            {isScheduled && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">🕐 Agendado</span>}
+            {isExpired && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">⏰ Expirado</span>}
+          </div>
+          <p className="text-sm text-slate-500 truncate">{link.url}</p>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          {userIsPro ? (
+            <select
+              value={link.highlight || ''}
+              onChange={async (e) => {
+                const highlight = e.target.value || null
+                await supabase.from('links').update({ highlight }).eq('id', link.id)
+                setLinks(links.map(l => l.id === link.id ? { ...l, highlight: highlight as any } : l))
+              }}
+              className="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors"
+              title="Animação de destaque"
+            >
+              <option value="">Sem destaque</option>
+              <option value="pulse">✨ Pulso</option>
+              <option value="shine">💫 Brilho</option>
+              <option value="shake">👀 Shake</option>
+              <option value="glow">🔵 Glow</option>
+              <option value="featured">⭐ Destaque</option>
+            </select>
+          ) : (
+            <button
+              onClick={onShowUpgrade}
+              className="text-xs bg-slate-100 hover:bg-amber-50 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors text-slate-400 hover:text-amber-600 flex items-center gap-1"
+              title="Destaques - Pro"
+            >
+              <Star className="w-3 h-3" />
+              <Lock className="w-2.5 h-2.5" />
+            </button>
+          )}
+          {(link.url.match(/youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/p\/|instagram\.com\/reel\//) && (
+            <button
+              onClick={async () => {
+                if (!userIsPro) {
+                  onShowUpgrade()
+                  return
+                }
+                const is_embed = !link.is_embed
+                await supabase.from('links').update({ is_embed }).eq('id', link.id)
+                setLinks(links.map(l => l.id === link.id ? { ...l, is_embed } : l))
+              }}
+              className={`p-2 rounded-lg transition-all ${!userIsPro ? 'text-slate-300' : link.is_embed ? 'bg-violet-100 text-violet-600' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'}`}
+              title={!userIsPro ? 'Embeds - Pro' : link.is_embed ? 'Exibindo como embed' : 'Exibir como embed de vídeo'}
+            >
+              <Play className="w-4 h-4" />
+            </button>
+          ))}
+          <button
+            onClick={() => onDelete(link.id)}
+            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+            title="Excluir"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Scheduling inputs - mobile */}
+      <div className="flex sm:hidden flex-col gap-2 ml-0 mt-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 w-16">🗓️ Início:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_start?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
+            }}
+            className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 w-16">⏰ Fim:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_end?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
+            }}
+            className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
+          />
+        </div>
+      </div>
+      {/* Scheduling inputs - desktop */}
+      <div className="hidden sm:group-hover:flex items-center gap-4 ml-14 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">🗓️ Início:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_start?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
+            }}
+            className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">⏰ Fim:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_end?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
+            }}
+            className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Dashboard
 function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [links, setLinks] = useState<Link[]>([])
@@ -912,6 +1117,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [copied, setCopied] = useState(false)
   const [showMobilePreview, setShowMobilePreview] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [reorderSaving, setReorderSaving] = useState(false)
 
   const userPlan = profile.plan || 'free'
   const userIsPro = isPro(userPlan)
@@ -975,6 +1181,37 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
     await supabase.from('links').delete().eq('id', id)
     setLinks(links.filter(l => l.id !== id))
   }
+
+  // Drag-and-drop sensors with activation constraint to prevent accidental drags
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = links.findIndex(l => l.id === active.id)
+    const newIndex = links.findIndex(l => l.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(links, oldIndex, newIndex)
+    const withPositions = reordered.map((link, i) => ({ ...link, position: i }))
+    setLinks(withPositions)
+
+    // Persist new positions to database
+    setReorderSaving(true)
+    try {
+      await Promise.all(
+        withPositions.map((link, i) =>
+          supabase.from('links').update({ position: i }).eq('id', link.id)
+        )
+      )
+    } finally {
+      setReorderSaving(false)
+    }
+  }, [links])
 
   async function updateProfile() {
     await supabase.from('profiles').update(profile).eq('id', user.id)
@@ -1209,7 +1446,16 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               <div className="p-4 sm:p-8 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seus Links</h2>
-                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Gerencie seus destinos</p>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                    {reorderSaving ? (
+                      <span className="text-sky-600 font-medium inline-flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse" />
+                        Salvando nova ordem...
+                      </span>
+                    ) : (
+                      'Arraste para reordenar'
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {!userIsPro && (
@@ -1221,7 +1467,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                 </div>
               </div>
 
-              {/* Links List */}
+              {/* Links List with Drag-and-Drop */}
               <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto dash-scrollbar">
                 {links.length === 0 ? (
                   <div className="p-12 text-center">
@@ -1231,155 +1477,26 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                     <p className="text-slate-400 font-medium">Você ainda não adicionou nenhum link.</p>
                   </div>
                 ) : (
-                  links.map((link, idx) => {
-                    // Calculate schedule status
-                    const now = new Date()
-                    const startDate = link.scheduled_start ? new Date(link.scheduled_start) : null
-                    const endDate = link.scheduled_end ? new Date(link.scheduled_end) : null
-                    const isScheduled = startDate && startDate > now
-                    const isExpired = endDate && endDate < now
-
-                    return (
-                      <div key={link.id} className="p-4 sm:p-6 flex flex-col gap-3 group hover:bg-slate-50/50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <button className="cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-400 transition-colors">
-                            <GripVertical className="w-5 h-5" />
-                          </button>
-
-                          <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors overflow-hidden p-2">
-                            <LinkIcon type={link.type} url={link.url} className="w-full h-full" />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx + 1}</span>
-                              <p className="font-bold text-slate-900 truncate max-w-[150px] sm:max-w-none">{link.title}</p>
-                              {isScheduled && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">🕐 Agendado</span>}
-                              {isExpired && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">⏰ Expirado</span>}
-                            </div>
-                            <p className="text-sm text-slate-500 truncate">{link.url}</p>
-                          </div>
-
-                          {/* Controls - always visible on mobile, hover on desktop */}
-                          <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                            {/* Highlight selector - Pro only */}
-                            {userIsPro ? (
-                              <select
-                                value={link.highlight || ''}
-                                onChange={async (e) => {
-                                  const highlight = e.target.value || null
-                                  await supabase.from('links').update({ highlight }).eq('id', link.id)
-                                  setLinks(links.map(l => l.id === link.id ? { ...l, highlight: highlight as any } : l))
-                                }}
-                                className="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors"
-                                title="Animação de destaque"
-                              >
-                                <option value="">Sem destaque</option>
-                                <option value="pulse">✨ Pulso</option>
-                                <option value="shine">💫 Brilho</option>
-                                <option value="shake">👀 Shake</option>
-                                <option value="glow">🔵 Glow</option>
-                                <option value="featured">⭐ Destaque</option>
-                              </select>
-                            ) : (
-                              <button
-                                onClick={() => setShowUpgradeModal(true)}
-                                className="text-xs bg-slate-100 hover:bg-amber-50 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors text-slate-400 hover:text-amber-600 flex items-center gap-1"
-                                title="Destaques - Pro"
-                              >
-                                <Star className="w-3 h-3" />
-                                <Lock className="w-2.5 h-2.5" />
-                              </button>
-                            )}
-                            {/* Embed toggle - Pro only, for YouTube/TikTok links */}
-                            {(link.url.match(/youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/p\/|instagram\.com\/reel\//) && (
-                              <button
-                                onClick={async () => {
-                                  if (!userIsPro) {
-                                    setShowUpgradeModal(true)
-                                    return
-                                  }
-                                  const is_embed = !link.is_embed
-                                  await supabase.from('links').update({ is_embed }).eq('id', link.id)
-                                  setLinks(links.map(l => l.id === link.id ? { ...l, is_embed } : l))
-                                }}
-                                className={`p-2 rounded-lg transition-all ${!userIsPro ? 'text-slate-300' : link.is_embed ? 'bg-violet-100 text-violet-600' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'}`}
-                                title={!userIsPro ? 'Embeds - Pro' : link.is_embed ? 'Exibindo como embed' : 'Exibir como embed de vídeo'}
-                              >
-                                <Play className="w-4 h-4" />
-                              </button>
-                            ))}
-                            <button
-                              onClick={() => deleteLink(link.id)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Scheduling inputs - always visible on mobile, hover on desktop */}
-                        <div className="flex sm:hidden flex-col gap-2 ml-0 mt-2 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400 w-16">🗓️ Início:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_start?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
-                              }}
-                              className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400 w-16">⏰ Fim:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_end?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
-                              }}
-                              className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
-                            />
-                          </div>
-                        </div>
-                        {/* Desktop hover version */}
-                        <div className="hidden sm:group-hover:flex items-center gap-4 ml-14 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">🗓️ Início:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_start?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
-                              }}
-                              className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">⏰ Fim:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_end?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
-                              }}
-                              className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext items={links.map(l => l.id)} strategy={verticalListSortingStrategy}>
+                      {links.map((link, idx) => (
+                        <SortableLinkItem
+                          key={link.id}
+                          link={link}
+                          idx={idx}
+                          userIsPro={userIsPro}
+                          links={links}
+                          setLinks={setLinks}
+                          onDelete={deleteLink}
+                          onShowUpgrade={() => setShowUpgradeModal(true)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
 
@@ -1458,14 +1575,47 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                   <div className="inline-block p-1 bg-emerald-100 rounded-lg text-emerald-700 text-[10px] font-bold uppercase tracking-wider mb-2">
                     Funcionalidade Premium Ativada
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Sua chave PIX (CPF, Celular, Email ou Aleatória)"
-                    value={profile.pix_key || ''}
-                    onChange={(e) => setProfile({ ...profile, pix_key: e.target.value })}
-                    onBlur={updateProfile}
-                    className="input-custom input-focus text-center font-medium"
-                  />
+                  {(() => {
+                    const pixKey = profile.pix_key || ''
+                    const hasPixKey = pixKey.length > 0
+                    const pixKeyIsValid = hasPixKey && isValidPixKey(pixKey)
+                    const borderColor = !hasPixKey
+                      ? ''
+                      : pixKeyIsValid
+                        ? 'border-emerald-400 focus:ring-emerald-400'
+                        : 'border-red-300 focus:ring-red-400'
+                    return (
+                      <>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Sua chave PIX (CPF, Celular, Email ou Aleatória)"
+                            value={pixKey}
+                            onChange={(e) => setProfile({ ...profile, pix_key: e.target.value })}
+                            onBlur={() => {
+                              if (!hasPixKey || pixKeyIsValid) updateProfile()
+                            }}
+                            className={`input-custom input-focus text-center font-medium ${borderColor}`}
+                            aria-invalid={hasPixKey && !pixKeyIsValid}
+                          />
+                          {hasPixKey && (
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {pixKeyIsValid ? (
+                                <CheckCircle className="w-5 h-5 text-emerald-500" />
+                              ) : (
+                                <X className="w-5 h-5 text-red-400" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {hasPixKey && !pixKeyIsValid && (
+                          <p className="text-xs text-red-500 mt-1">
+                            Chave inválida. Use CPF, CNPJ, email, celular (+55...) ou UUID.
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed text-center px-4">
                   Nós não cobramos taxas sobre suas vendas. O valor cai integralmente na conta vinculada à sua chave PIX.
