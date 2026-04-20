@@ -22,6 +22,7 @@ import { supabase } from './lib/supabase'
 import type { User, Link } from './lib/supabase'
 import { generatePixPayload, getPixQrCodeUrl, isValidPixKey } from './lib/pix'
 import { detectLinkType, getFaviconUrl } from './lib/icons'
+import { generateAutoTitle } from './lib/lm-studio'
 import { PLANS, FREE_THEMES, isPro, isAtLeastStarter, canAddMoreLinks } from './lib/plans'
 import { createCheckoutSession, logSubscriptionEvent } from './lib/stripe'
 import {
@@ -29,7 +30,7 @@ import {
   ChevronRight, Check, LogOut,
   Trash2, GripVertical, Plus, Copy, CheckCircle, X, ShieldCheck,
   Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play,
-  Crown, Zap, Lock, Star, Sun, Moon, Monitor
+  Crown, Zap, Lock, Star, Sun, Moon, Monitor, Sparkles
 } from 'lucide-react'
 
 // Embed Helper Functions
@@ -968,24 +969,25 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
   ]
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl my-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 overflow-y-auto">
+      <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl my-4">
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-center">
-          <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white p-1">
+        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-4 sm:p-6 text-center">
+          <button onClick={onClose} className="absolute top-3 right-3 sm:top-4 sm:right-4 text-white/60 hover:text-white p-1" aria-label="Fechar">
             <X className="w-5 h-5" />
           </button>
-          <h2 className="text-2xl font-bold text-white mb-1">Escolha seu plano</h2>
-          <p className="text-slate-300 text-sm">Desbloqueie mais do LinkFácil</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Escolha seu plano</h2>
+          <p className="text-slate-300 text-xs sm:text-sm">Desbloqueie mais do LinkFácil</p>
         </div>
 
         {/* Plan Cards */}
-        <div className="p-6 grid sm:grid-cols-2 gap-4">
+        <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {planCards.map((plan) => {
             const isCurrent = currentPlan === plan.id
             const isLoading = loading === plan.id
             return (
-              <div key={plan.id} className={`border-2 rounded-2xl p-5 flex flex-col ${isCurrent ? 'border-emerald-400 bg-emerald-50/30' : plan.borderClass + ' bg-white'}`}>
+              <div key={plan.id} className={`border-2 rounded-2xl p-4 sm:p-5 flex flex-col ${isCurrent ? 'border-emerald-400 bg-emerald-50/30' : plan.borderClass + ' bg-white'}`}>
                 {isCurrent && (
                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2">Plano atual</span>
                 )}
@@ -996,13 +998,13 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
                   {plan.icon}
                 </div>
                 <p className="font-bold text-slate-900 text-lg mb-0.5">{plan.label}</p>
-                <div className="flex items-baseline gap-0.5 mb-4">
+                <div className="flex items-baseline gap-0.5 mb-3 sm:mb-4">
                   <span className="text-2xl font-extrabold text-slate-900">{plan.price}</span>
                   <span className="text-slate-400 text-sm">{plan.period}</span>
                 </div>
-                <ul className="space-y-2 mb-5 flex-1">
+                <ul className="space-y-1.5 sm:space-y-2 mb-4 sm:mb-5 flex-1">
                   {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-slate-600">
+                    <li key={i} className="flex items-center gap-2 text-xs sm:text-sm text-slate-600">
                       <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                       {f}
                     </li>
@@ -1011,7 +1013,7 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
                 <button
                   onClick={() => handleUpgrade(plan.id)}
                   disabled={!!loading || isCurrent}
-                  className={`w-full ${plan.btnClass} text-white py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
+                  className={`w-full ${plan.btnClass} text-white py-2.5 sm:py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
                 >
                   {isLoading ? 'Processando...' : isCurrent ? 'Plano ativo' : `Assinar ${plan.label}`}
                 </button>
@@ -1021,15 +1023,16 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
         </div>
 
         {error && (
-          <div className="px-6 pb-4">
+          <div className="px-4 sm:px-6 pb-4">
             <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm text-center">{error}</div>
           </div>
         )}
 
-        <p className="text-xs text-slate-400 pb-6 text-center flex items-center justify-center gap-2">
+        <p className="text-xs text-slate-400 pb-4 sm:pb-6 text-center flex items-center justify-center gap-2">
           <ShieldCheck className="w-4 h-4" />
           7 dias de garantia • Cancele quando quiser
         </p>
+      </div>
       </div>
     </div>
   )
@@ -1279,6 +1282,9 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
   const [showMobilePreview, setShowMobilePreview] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [reorderSaving, setReorderSaving] = useState(false)
+  const [suggestedTitle, setSuggestedTitle] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const userPlan = profile.plan || 'free'
   const userIsPro = isPro(userPlan)
@@ -1334,6 +1340,8 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
     if (!error && data) {
       setLinks([...links, data[0] as Link])
       setNewLink({ title: '', url: '', type: 'link' })
+      setSuggestedTitle(null)
+      setAiError(null)
     }
     setLoading(false)
   }
@@ -1342,6 +1350,22 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
     if (!confirm('Deseja realmente excluir este link?')) return
     await supabase.from('links').delete().eq('id', id)
     setLinks(links.filter(l => l.id !== id))
+  }
+
+  async function generateTitleWithAI() {
+    if (!newLink.url) return
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const result = await generateAutoTitle(newLink.url)
+      setSuggestedTitle(result.title)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro ao gerar título'
+      setAiError(msg)
+      setSuggestedTitle(null)
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   // Drag-and-drop sensors with activation constraint to prevent accidental drags
@@ -1694,16 +1718,63 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
                     onChange={(e) => setNewLink({ ...newLink, title: e.target.value })}
                     className="input-custom input-focus py-2.5"
                   />
-                  <input
-                    type="url"
-                    id="new-link-url"
-                    aria-label="URL do link"
-                    placeholder="URL (Ex: https://wa.me/...)"
-                    value={newLink.url}
-                    onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
-                    className="input-custom input-focus py-2.5"
-                  />
+                  <div className="relative">
+                    <input
+                      type="url"
+                      id="new-link-url"
+                      aria-label="URL do link"
+                      placeholder="URL (Ex: https://wa.me/...)"
+                      value={newLink.url}
+                      onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
+                      className="input-custom input-focus py-2.5 pr-14"
+                    />
+                    {newLink.url && (
+                      <button
+                        onClick={generateTitleWithAI}
+                        disabled={aiLoading}
+                        aria-label="Gerar título com IA"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Gerar título com IA"
+                      >
+                        <Sparkles className={`w-5 h-5 ${aiLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Suggested Title Card */}
+                {(suggestedTitle || aiError) && (
+                  <div className="mb-4 p-4 rounded-xl border-2 bg-white">
+                    {aiError ? (
+                      <div className="text-sm text-red-600">
+                        <p className="font-medium">Erro ao gerar título</p>
+                        <p className="text-xs mt-1">{aiError}</p>
+                      </div>
+                    ) : suggestedTitle ? (
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 mb-2">✨ Sugestão de Título</p>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="text"
+                            value={suggestedTitle}
+                            readOnly
+                            className="flex-1 px-3 py-2 bg-sky-50 border border-sky-200 rounded-lg text-sm font-medium text-sky-900"
+                          />
+                          <button
+                            onClick={() => {
+                              setNewLink({ ...newLink, title: suggestedTitle })
+                              setSuggestedTitle(null)
+                            }}
+                            className="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors whitespace-nowrap"
+                          >
+                            Usar
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
                 <button
                   onClick={addLink}
                   disabled={loading || !newLink.title || !newLink.url}
