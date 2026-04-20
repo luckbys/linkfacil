@@ -6,6 +6,9 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Types
+export type PlanType = 'free' | 'starter' | 'pro'
+export type SubscriptionStatus = 'active' | 'inactive' | 'past_due' | 'canceled'
+
 export interface User {
   id: string
   email: string
@@ -16,6 +19,12 @@ export interface User {
   pix_key?: string
   pix_enabled: boolean
   theme: string
+  plan: PlanType
+  stripe_customer_id?: string
+  subscription_id?: string
+  subscription_status: SubscriptionStatus
+  subscription_ends_at?: string | null
+  referral_count?: number
   created_at: string
 }
 

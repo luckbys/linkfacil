@@ -1,14 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import DOMPurify from 'dompurify'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import './index.css'
 import { supabase } from './lib/supabase'
 import type { User, Link } from './lib/supabase'
-import { generatePixPayload, getPixQrCodeUrl } from './lib/pix'
+import { generatePixPayload, getPixQrCodeUrl, isValidPixKey } from './lib/pix'
 import { detectLinkType, getFaviconUrl } from './lib/icons'
+import { PLANS, FREE_THEMES, isPro, isAtLeastStarter, canAddMoreLinks } from './lib/plans'
+import { createCheckoutSession, logSubscriptionEvent } from './lib/stripe'
 import {
   Link2, CreditCard, Smartphone, Palette, BarChart3,
   ChevronRight, Check, LogOut,
   Trash2, GripVertical, Plus, Copy, CheckCircle, X, ShieldCheck,
-  Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play
+  Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play,
+  Crown, Zap, Lock, Star
 } from 'lucide-react'
 
 // Embed Helper Functions
@@ -35,12 +56,17 @@ function getTikTokVideoId(url: string): string | null {
 function SocialEmbed({ url, embedHtml }: { url: string; embedHtml?: string | null }) {
   const embedType = getEmbedType(url)
 
-  // Custom HTML embed (for Instagram)
+  // Custom HTML embed (for Instagram) - sanitized to prevent XSS
   if (embedHtml) {
+    const sanitizedHtml = DOMPurify.sanitize(embedHtml, {
+      ADD_TAGS: ['iframe', 'blockquote'],
+      ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'data-instgrm-permalink', 'data-instgrm-version'],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+    })
     return (
       <div
         className="social-embed w-full rounded-xl overflow-hidden bg-white shadow-md"
-        dangerouslySetInnerHTML={{ __html: embedHtml }}
+        dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
       />
     )
   }
@@ -128,7 +154,6 @@ function useAuth() {
   }, [])
 
   async function fetchProfile(userId: string) {
-    console.log('Fetching profile for:', userId)
     let { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -137,7 +162,6 @@ function useAuth() {
 
     // Se o perfil não existe (erro PGRST116), vamos criar um
     if (error && error.code === 'PGRST116') {
-      console.log('Profile missing, creating default profile...')
 
       // Pegamos os detalhes do usuário atual da sessão
       const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -156,19 +180,13 @@ function useAuth() {
           .select()
           .single()
 
-        if (createError) {
-          console.error('Error creating default profile:', createError)
-        } else {
-          console.log('Created default profile:', newProfile)
+        if (!createError) {
           data = newProfile
         }
       }
-    } else if (error) {
-      console.error('Error fetching profile:', error)
     }
 
     if (data) {
-      console.log('Final profile set:', data)
       setUser(data as User)
     }
     setLoading(false)
@@ -501,27 +519,22 @@ function AuthPage({ onAuth }: { onAuth: () => void }) {
 
     try {
       if (isLogin) {
-        console.log('Attempting login for:', email)
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        console.log('Login successful:', data)
       } else {
-        console.log('Attempting signup for:', email)
-        const { data, error } = await supabase.auth.signUp({
+        const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
-              name: email.split('@')[0], // Nome padrão baseado no email
+              name: email.split('@')[0],
             }
           }
         })
         if (error) throw error
-        console.log('Signup successful:', data)
       }
       onAuth()
     } catch (err: any) {
-      console.error('Auth error:', err)
       setError(err.message || 'Erro na autenticação')
     } finally {
       setLoading(false)
@@ -782,6 +795,410 @@ function AnalyticsDashboard({ userId, links }: { userId: string, links: Link[] }
   )
 }
 
+// Plan Badge Component
+function PlanBadge({ plan }: { plan: string }) {
+  if (plan === 'pro') {
+    return (
+      <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700 text-xs font-bold rounded-full uppercase tracking-wider border border-violet-200">
+        <Crown className="w-3 h-3" />
+        Pro
+      </div>
+    )
+  }
+  if (plan === 'starter') {
+    return (
+      <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-sky-100 to-blue-100 text-sky-700 text-xs font-bold rounded-full uppercase tracking-wider border border-sky-200">
+        <Zap className="w-3 h-3" />
+        Starter
+      </div>
+    )
+  }
+  return (
+    <div className="px-2 sm:px-3 py-1 bg-slate-100 text-slate-500 text-xs font-bold rounded-full uppercase tracking-wider">
+      Free
+    </div>
+  )
+}
+
+// Upgrade CTA Component (inline)
+function UpgradeInline({ feature, onUpgrade }: { feature: string, onUpgrade: () => void }) {
+  return (
+    <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl">
+      <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+      <p className="text-xs text-amber-700 flex-1">
+        <strong>{feature}</strong> é uma funcionalidade Pro.
+      </p>
+      <button
+        onClick={onUpgrade}
+        className="text-xs font-bold text-amber-700 bg-amber-200 hover:bg-amber-300 px-3 py-1 rounded-lg transition-colors whitespace-nowrap"
+      >
+        Upgrade
+      </button>
+    </div>
+  )
+}
+
+// Upgrade Modal Component — shows 3-plan comparison
+function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
+  isOpen: boolean
+  onClose: () => void
+  userId: string
+  email: string
+  currentPlan?: string
+}) {
+  const [loading, setLoading] = useState<'starter' | 'pro' | null>(null)
+  const [error, setError] = useState('')
+
+  if (!isOpen) return null
+
+  async function handleUpgrade(plan: 'starter' | 'pro') {
+    setLoading(plan)
+    setError('')
+    try {
+      await logSubscriptionEvent(userId, 'checkout_started')
+      const checkoutUrl = await createCheckoutSession(userId, email)
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl
+      } else {
+        setError('Pagamento ainda não configurado. Entre em contato pelo WhatsApp para assinar.')
+      }
+    } catch {
+      setError('Erro ao iniciar pagamento. Tente novamente.')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const planCards = [
+    {
+      id: 'starter' as const,
+      label: 'Starter',
+      price: 'R$ 9,90',
+      period: '/mês',
+      badge: null,
+      icon: <Zap className="w-6 h-6 text-sky-600" />,
+      iconBg: 'bg-sky-50',
+      btnClass: 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700',
+      borderClass: 'border-sky-200',
+      features: PLANS.starter.features,
+      limit: '20 links',
+    },
+    {
+      id: 'pro' as const,
+      label: 'Pro',
+      price: 'R$ 19,90',
+      period: '/mês',
+      badge: 'Mais recursos',
+      icon: <Crown className="w-6 h-6 text-violet-600" />,
+      iconBg: 'bg-violet-50',
+      btnClass: 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700',
+      borderClass: 'border-violet-200',
+      features: PLANS.pro.features,
+      limit: 'Links ilimitados',
+    },
+  ]
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl my-4">
+        {/* Header */}
+        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-center">
+          <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white p-1">
+            <X className="w-5 h-5" />
+          </button>
+          <h2 className="text-2xl font-bold text-white mb-1">Escolha seu plano</h2>
+          <p className="text-slate-300 text-sm">Desbloqueie mais do LinkFácil</p>
+        </div>
+
+        {/* Plan Cards */}
+        <div className="p-6 grid sm:grid-cols-2 gap-4">
+          {planCards.map((plan) => {
+            const isCurrent = currentPlan === plan.id
+            const isLoading = loading === plan.id
+            return (
+              <div key={plan.id} className={`border-2 rounded-2xl p-5 flex flex-col ${isCurrent ? 'border-emerald-400 bg-emerald-50/30' : plan.borderClass + ' bg-white'}`}>
+                {isCurrent && (
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2">Plano atual</span>
+                )}
+                {plan.badge && !isCurrent && (
+                  <span className="text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full w-fit mb-2">{plan.badge}</span>
+                )}
+                <div className={`w-10 h-10 ${plan.iconBg} rounded-xl flex items-center justify-center mb-3`}>
+                  {plan.icon}
+                </div>
+                <p className="font-bold text-slate-900 text-lg mb-0.5">{plan.label}</p>
+                <div className="flex items-baseline gap-0.5 mb-4">
+                  <span className="text-2xl font-extrabold text-slate-900">{plan.price}</span>
+                  <span className="text-slate-400 text-sm">{plan.period}</span>
+                </div>
+                <ul className="space-y-2 mb-5 flex-1">
+                  {plan.features.map((f, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-slate-600">
+                      <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => handleUpgrade(plan.id)}
+                  disabled={!!loading || isCurrent}
+                  className={`w-full ${plan.btnClass} text-white py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
+                >
+                  {isLoading ? 'Processando...' : isCurrent ? 'Plano ativo' : `Assinar ${plan.label}`}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        {error && (
+          <div className="px-6 pb-4">
+            <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm text-center">{error}</div>
+          </div>
+        )}
+
+        <p className="text-xs text-slate-400 pb-6 text-center flex items-center justify-center gap-2">
+          <ShieldCheck className="w-4 h-4" />
+          7 dias de garantia • Cancele quando quiser
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Usage Meter — visual indicator of link limit usage
+function UsageMeter({ current, plan, onUpgrade }: { current: number, plan: string, onUpgrade: () => void }) {
+  const config = PLANS[plan as keyof typeof PLANS] || PLANS.free
+  const isUnlimited = config.maxLinks === Infinity
+  if (isUnlimited) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+        <span className="text-xs text-slate-400 font-medium">Ilimitados</span>
+      </div>
+    )
+  }
+
+  const max = config.maxLinks
+  const pct = Math.min((current / max) * 100, 100)
+  const atLimit = current >= max
+  const nearLimit = current >= max * 0.8
+
+  const barColor = atLimit ? 'bg-red-500' : nearLimit ? 'bg-amber-500' : 'bg-sky-500'
+  const textColor = atLimit ? 'text-red-600' : nearLimit ? 'text-amber-600' : 'text-slate-500'
+
+  const nextPlan = plan === 'free' ? 'Starter' : 'Pro'
+  const nextLimit = plan === 'free' ? '20 links' : 'ilimitados'
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5">
+        <span className={`text-xs font-bold ${textColor}`}>{current}/{max}</span>
+        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      {atLimit && (
+        <button
+          onClick={onUpgrade}
+          className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full transition-colors"
+        >
+          <ChevronRight className="w-3 h-3" />
+          {nextPlan} ({nextLimit})
+        </button>
+      )}
+    </div>
+  )
+}
+
+// Sortable Link Item Component for drag-and-drop
+function SortableLinkItem({
+  link,
+  idx,
+  userIsPro,
+  links,
+  setLinks,
+  onDelete,
+  onShowUpgrade,
+}: {
+  link: Link
+  idx: number
+  userIsPro: boolean
+  links: Link[]
+  setLinks: (links: Link[]) => void
+  onDelete: (id: string) => void
+  onShowUpgrade: () => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: link.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.9 : undefined,
+  }
+
+  const now = new Date()
+  const startDate = link.scheduled_start ? new Date(link.scheduled_start) : null
+  const endDate = link.scheduled_end ? new Date(link.scheduled_end) : null
+  const isScheduled = startDate && startDate > now
+  const isExpired = endDate && endDate < now
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 sm:p-6 flex flex-col gap-3 group hover:bg-slate-50/50 transition-colors ${isDragging ? 'bg-white shadow-lg rounded-xl ring-2 ring-sky-200' : ''}`}
+    >
+      <div className="flex items-center gap-4">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-400 transition-colors touch-none"
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+
+        <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors overflow-hidden p-2">
+          <LinkIcon type={link.type} url={link.url} className="w-full h-full" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx + 1}</span>
+            <p className="font-bold text-slate-900 truncate max-w-[150px] sm:max-w-none">{link.title}</p>
+            {isScheduled && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">🕐 Agendado</span>}
+            {isExpired && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">⏰ Expirado</span>}
+          </div>
+          <p className="text-sm text-slate-500 truncate">{link.url}</p>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+          {userIsPro ? (
+            <select
+              value={link.highlight || ''}
+              onChange={async (e) => {
+                const highlight = e.target.value || null
+                await supabase.from('links').update({ highlight }).eq('id', link.id)
+                setLinks(links.map(l => l.id === link.id ? { ...l, highlight: highlight as any } : l))
+              }}
+              className="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors"
+              title="Animação de destaque"
+            >
+              <option value="">Sem destaque</option>
+              <option value="pulse">✨ Pulso</option>
+              <option value="shine">💫 Brilho</option>
+              <option value="shake">👀 Shake</option>
+              <option value="glow">🔵 Glow</option>
+              <option value="featured">⭐ Destaque</option>
+            </select>
+          ) : (
+            <button
+              onClick={onShowUpgrade}
+              className="text-xs bg-slate-100 hover:bg-amber-50 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors text-slate-400 hover:text-amber-600 flex items-center gap-1"
+              title="Destaques - Pro"
+            >
+              <Star className="w-3 h-3" />
+              <Lock className="w-2.5 h-2.5" />
+            </button>
+          )}
+          {(link.url.match(/youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/p\/|instagram\.com\/reel\//) && (
+            <button
+              onClick={async () => {
+                if (!userIsPro) {
+                  onShowUpgrade()
+                  return
+                }
+                const is_embed = !link.is_embed
+                await supabase.from('links').update({ is_embed }).eq('id', link.id)
+                setLinks(links.map(l => l.id === link.id ? { ...l, is_embed } : l))
+              }}
+              className={`p-2 rounded-lg transition-all ${!userIsPro ? 'text-slate-300' : link.is_embed ? 'bg-violet-100 text-violet-600' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'}`}
+              title={!userIsPro ? 'Embeds - Pro' : link.is_embed ? 'Exibindo como embed' : 'Exibir como embed de vídeo'}
+            >
+              <Play className="w-4 h-4" />
+            </button>
+          ))}
+          <button
+            onClick={() => onDelete(link.id)}
+            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+            title="Excluir"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Scheduling inputs - mobile */}
+      <div className="flex sm:hidden flex-col gap-2 ml-0 mt-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 w-16">🗓️ Início:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_start?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
+            }}
+            className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 w-16">⏰ Fim:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_end?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
+            }}
+            className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
+          />
+        </div>
+      </div>
+      {/* Scheduling inputs - desktop */}
+      <div className="hidden sm:group-hover:flex items-center gap-4 ml-14 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">🗓️ Início:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_start?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
+            }}
+            className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">⏰ Fim:</span>
+          <input
+            type="datetime-local"
+            value={link.scheduled_end?.slice(0, 16) || ''}
+            onChange={async (e) => {
+              const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
+              await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
+              setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
+            }}
+            className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Dashboard
 function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [links, setLinks] = useState<Link[]>([])
@@ -790,6 +1207,23 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showMobilePreview, setShowMobilePreview] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [reorderSaving, setReorderSaving] = useState(false)
+
+  const userPlan = profile.plan || 'free'
+  const userIsPro = isPro(userPlan)
+  const userIsAtLeastStarter = isAtLeastStarter(userPlan)
+
+  // Check for upgrade success in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('upgrade') === 'success') {
+      // Update local state optimistically
+      setProfile(prev => ({ ...prev, plan: 'pro', subscription_status: 'active' }))
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   useEffect(() => {
     fetchLinks()
@@ -806,6 +1240,12 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
   async function addLink() {
     if (!newLink.title || !newLink.url) return
+
+    if (!canAddMoreLinks(userPlan, links.length)) {
+      setShowUpgradeModal(true)
+      return
+    }
+
     setLoading(true)
 
     const detectedType = detectLinkType(newLink.url)
@@ -833,6 +1273,37 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
     await supabase.from('links').delete().eq('id', id)
     setLinks(links.filter(l => l.id !== id))
   }
+
+  // Drag-and-drop sensors with activation constraint to prevent accidental drags
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = links.findIndex(l => l.id === active.id)
+    const newIndex = links.findIndex(l => l.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(links, oldIndex, newIndex)
+    const withPositions = reordered.map((link, i) => ({ ...link, position: i }))
+    setLinks(withPositions)
+
+    // Persist new positions to database
+    setReorderSaving(true)
+    try {
+      await Promise.all(
+        withPositions.map((link, i) =>
+          supabase.from('links').update({ position: i }).eq('id', link.id)
+        )
+      )
+    } finally {
+      setReorderSaving(false)
+    }
+  }, [links])
 
   async function updateProfile() {
     await supabase.from('profiles').update(profile).eq('id', user.id)
@@ -895,6 +1366,27 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
           </div>
 
           <div className="flex items-center gap-3">
+            {userPlan === 'free' && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-sm shadow-sky-500/20"
+              >
+                <Zap className="w-4 h-4" />
+                <span className="hidden sm:inline">Upgrade Starter</span>
+              </button>
+            )}
+            {userPlan === 'starter' && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-sm shadow-violet-500/20"
+              >
+                <Crown className="w-4 h-4" />
+                <span className="hidden sm:inline">Upgrade Pro</span>
+              </button>
+            )}
+            {userIsPro && (
+              <PlanBadge plan="pro" />
+            )}
             <button
               onClick={copyLink}
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-medium transition-all group active:scale-95"
@@ -933,9 +1425,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             <section className="dash-card p-4 sm:p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seu Perfil</h2>
-                <div className="px-2 sm:px-3 py-1 bg-sky-50 text-sky-600 text-xs font-bold rounded-full uppercase tracking-wider">
-                  Básico
-                </div>
+                <PlanBadge plan={userPlan} />
               </div>
 
               <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50/50 rounded-xl border border-slate-100">
@@ -1016,23 +1506,36 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {themes.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={async () => {
-                      const updated = { ...profile, theme: t.id }
-                      setProfile(updated)
-                      await supabase.from('profiles').update({ theme: t.id }).eq('id', user.id)
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all text-left group ${profile.theme === t.id ? 'border-sky-500 bg-sky-50/50' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
-                  >
-                    <div className="flex gap-1 mb-3">
-                      <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[0] }} />
-                      <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[1] }} />
-                    </div>
-                    <span className={`text-sm font-bold ${profile.theme === t.id ? 'text-sky-700' : 'text-slate-600'}`}>{t.name}</span>
-                  </button>
-                ))}
+                {themes.map((t) => {
+                  const isLocked = !userIsAtLeastStarter && !FREE_THEMES.includes(t.id)
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={async () => {
+                        if (isLocked) {
+                          setShowUpgradeModal(true)
+                          return
+                        }
+                        const updated = { ...profile, theme: t.id }
+                        setProfile(updated)
+                        await supabase.from('profiles').update({ theme: t.id }).eq('id', user.id)
+                      }}
+                      className={`p-4 rounded-2xl border-2 transition-all text-left group relative ${profile.theme === t.id ? 'border-sky-500 bg-sky-50/50' : 'border-slate-100 hover:border-slate-200 bg-white'} ${isLocked ? 'opacity-75' : ''}`}
+                    >
+                      {isLocked && (
+                        <div className="absolute top-2 right-2">
+                          <Lock className="w-3.5 h-3.5 text-amber-500" />
+                        </div>
+                      )}
+                      <div className="flex gap-1 mb-3">
+                        <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[0] }} />
+                        <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[1] }} />
+                      </div>
+                      <span className={`text-sm font-bold ${profile.theme === t.id ? 'text-sky-700' : 'text-slate-600'}`}>{t.name}</span>
+                      {isLocked && <span className="block text-[10px] text-sky-500 font-bold mt-0.5">STARTER</span>}
+                    </button>
+                  )
+                })}
               </div>
             </section>
 
@@ -1044,14 +1547,30 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               <div className="p-4 sm:p-8 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seus Links</h2>
-                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Gerencie seus destinos</p>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                    {reorderSaving ? (
+                      <span className="text-sky-600 font-medium inline-flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse" />
+                        Salvando nova ordem...
+                      </span>
+                    ) : (
+                      'Arraste para reordenar'
+                    )}
+                  </p>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-sm sm:text-base">
-                  {links.length}
+                <div className="flex items-center gap-2">
+                  <UsageMeter
+                    current={links.length}
+                    plan={userPlan}
+                    onUpgrade={() => setShowUpgradeModal(true)}
+                  />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-sm sm:text-base">
+                    {links.length}
+                  </div>
                 </div>
               </div>
 
-              {/* Links List */}
+              {/* Links List with Drag-and-Drop */}
               <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto dash-scrollbar">
                 {links.length === 0 ? (
                   <div className="p-12 text-center">
@@ -1061,140 +1580,26 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                     <p className="text-slate-400 font-medium">Você ainda não adicionou nenhum link.</p>
                   </div>
                 ) : (
-                  links.map((link, idx) => {
-                    // Calculate schedule status
-                    const now = new Date()
-                    const startDate = link.scheduled_start ? new Date(link.scheduled_start) : null
-                    const endDate = link.scheduled_end ? new Date(link.scheduled_end) : null
-                    const isScheduled = startDate && startDate > now
-                    const isExpired = endDate && endDate < now
-
-                    return (
-                      <div key={link.id} className="p-4 sm:p-6 flex flex-col gap-3 group hover:bg-slate-50/50 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <button className="cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-400 transition-colors">
-                            <GripVertical className="w-5 h-5" />
-                          </button>
-
-                          <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors overflow-hidden p-2">
-                            <LinkIcon type={link.type} url={link.url} className="w-full h-full" />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{idx + 1}</span>
-                              <p className="font-bold text-slate-900 truncate max-w-[150px] sm:max-w-none">{link.title}</p>
-                              {isScheduled && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">🕐 Agendado</span>}
-                              {isExpired && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">⏰ Expirado</span>}
-                            </div>
-                            <p className="text-sm text-slate-500 truncate">{link.url}</p>
-                          </div>
-
-                          {/* Controls - always visible on mobile, hover on desktop */}
-                          <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                            {/* Highlight selector */}
-                            <select
-                              value={link.highlight || ''}
-                              onChange={async (e) => {
-                                const highlight = e.target.value || null
-                                await supabase.from('links').update({ highlight }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, highlight: highlight as any } : l))
-                              }}
-                              className="text-xs bg-slate-100 hover:bg-slate-200 rounded-lg px-2 py-1.5 border-0 cursor-pointer transition-colors"
-                              title="Animação de destaque"
-                            >
-                              <option value="">Sem destaque</option>
-                              <option value="pulse">✨ Pulso</option>
-                              <option value="shine">💫 Brilho</option>
-                              <option value="shake">👀 Shake</option>
-                              <option value="glow">🔵 Glow</option>
-                              <option value="featured">⭐ Destaque</option>
-                            </select>
-                            {/* Embed toggle - only for YouTube/TikTok links */}
-                            {(link.url.match(/youtube\.com|youtu\.be|tiktok\.com|instagram\.com\/p\/|instagram\.com\/reel\//) && (
-                              <button
-                                onClick={async () => {
-                                  const is_embed = !link.is_embed
-                                  await supabase.from('links').update({ is_embed }).eq('id', link.id)
-                                  setLinks(links.map(l => l.id === link.id ? { ...l, is_embed } : l))
-                                }}
-                                className={`p-2 rounded-lg transition-all ${link.is_embed ? 'bg-violet-100 text-violet-600' : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'}`}
-                                title={link.is_embed ? 'Exibindo como embed' : 'Exibir como embed de vídeo'}
-                              >
-                                <Play className="w-4 h-4" />
-                              </button>
-                            ))}
-                            <button
-                              onClick={() => deleteLink(link.id)}
-                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Scheduling inputs - always visible on mobile, hover on desktop */}
-                        <div className="flex sm:hidden flex-col gap-2 ml-0 mt-2 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400 w-16">🗓️ Início:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_start?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
-                              }}
-                              className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400 w-16">⏰ Fim:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_end?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
-                              }}
-                              className="flex-1 bg-slate-100 rounded px-2 py-2 text-slate-600 border-0"
-                            />
-                          </div>
-                        </div>
-                        {/* Desktop hover version */}
-                        <div className="hidden sm:group-hover:flex items-center gap-4 ml-14 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">🗓️ Início:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_start?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_start = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_start }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_start } : l))
-                              }}
-                              className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">⏰ Fim:</span>
-                            <input
-                              type="datetime-local"
-                              value={link.scheduled_end?.slice(0, 16) || ''}
-                              onChange={async (e) => {
-                                const scheduled_end = e.target.value ? new Date(e.target.value).toISOString() : null
-                                await supabase.from('links').update({ scheduled_end }).eq('id', link.id)
-                                setLinks(links.map(l => l.id === link.id ? { ...l, scheduled_end } : l))
-                              }}
-                              className="bg-slate-100 rounded px-2 py-1 text-slate-600 border-0"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext items={links.map(l => l.id)} strategy={verticalListSortingStrategy}>
+                      {links.map((link, idx) => (
+                        <SortableLinkItem
+                          key={link.id}
+                          link={link}
+                          idx={idx}
+                          userIsPro={userIsPro}
+                          links={links}
+                          setLinks={setLinks}
+                          onDelete={deleteLink}
+                          onShowUpgrade={() => setShowUpgradeModal(true)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
 
@@ -1244,36 +1649,163 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                     <p className="text-sm text-slate-500">Receba direto na sua conta</p>
                   </div>
                 </div>
-                <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ${profile.pix_enabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
-                  onClick={() => {
-                    const nextVal = !profile.pix_enabled;
-                    setProfile({ ...profile, pix_enabled: nextVal });
-                    supabase.from('profiles').update({ pix_enabled: nextVal }).eq('id', user.id);
-                  }}
-                >
-                  <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${profile.pix_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                </div>
+                {userIsAtLeastStarter ? (
+                  <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ${profile.pix_enabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                    onClick={() => {
+                      const nextVal = !profile.pix_enabled;
+                      setProfile({ ...profile, pix_enabled: nextVal });
+                      supabase.from('profiles').update({ pix_enabled: nextVal }).eq('id', user.id);
+                    }}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${profile.pix_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 text-sky-600 text-xs font-bold rounded-full border border-sky-200 hover:bg-sky-100 transition-colors"
+                  >
+                    <Lock className="w-3 h-3" />
+                    Starter
+                  </button>
+                )}
               </div>
 
+              {!userIsAtLeastStarter ? (
+                <UpgradeInline feature="PIX integrado" onUpgrade={() => setShowUpgradeModal(true)} />
+              ) : (
               <div className="space-y-4">
                 <div className="space-y-1.5 text-center">
                   <div className="inline-block p-1 bg-emerald-100 rounded-lg text-emerald-700 text-[10px] font-bold uppercase tracking-wider mb-2">
                     Funcionalidade Premium Ativada
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Sua chave PIX (CPF, Celular, Email ou Aleatória)"
-                    value={profile.pix_key || ''}
-                    onChange={(e) => setProfile({ ...profile, pix_key: e.target.value })}
-                    onBlur={updateProfile}
-                    className="input-custom input-focus text-center font-medium"
-                  />
+                  {(() => {
+                    const pixKey = profile.pix_key || ''
+                    const hasPixKey = pixKey.length > 0
+                    const pixKeyIsValid = hasPixKey && isValidPixKey(pixKey)
+                    const borderColor = !hasPixKey
+                      ? ''
+                      : pixKeyIsValid
+                        ? 'border-emerald-400 focus:ring-emerald-400'
+                        : 'border-red-300 focus:ring-red-400'
+                    return (
+                      <>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Sua chave PIX (CPF, Celular, Email ou Aleatória)"
+                            value={pixKey}
+                            onChange={(e) => setProfile({ ...profile, pix_key: e.target.value })}
+                            onBlur={() => {
+                              if (!hasPixKey || pixKeyIsValid) updateProfile()
+                            }}
+                            className={`input-custom input-focus text-center font-medium ${borderColor}`}
+                            aria-invalid={hasPixKey && !pixKeyIsValid}
+                          />
+                          {hasPixKey && (
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                              {pixKeyIsValid ? (
+                                <CheckCircle className="w-5 h-5 text-emerald-500" />
+                              ) : (
+                                <X className="w-5 h-5 text-red-400" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {hasPixKey && !pixKeyIsValid && (
+                          <p className="text-xs text-red-500 mt-1">
+                            Chave inválida. Use CPF, CNPJ, email, celular (+55...) ou UUID.
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed text-center px-4">
                   Nós não cobramos taxas sobre suas vendas. O valor cai integralmente na conta vinculada à sua chave PIX.
                 </p>
               </div>
+              )}
             </section>
+
+            {/* Referral Section */}
+            <section className="dash-card p-6 sm:p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <Star className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Indique Amigos</h2>
+                  <p className="text-xs text-slate-500">Ganhe 1 mês grátis por indicação</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50 to-sky-50 border border-emerald-100 rounded-2xl p-5 mb-4">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Seu link de indicação</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-sm font-medium text-slate-800 bg-white border border-slate-200 px-3 py-2 rounded-xl truncate">
+                    linkfacil.app/ref/{profile.slug}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`https://linkfacil.app/ref/${profile.slug}`)
+                    }}
+                    className="p-2 bg-white border border-slate-200 hover:bg-sky-50 hover:border-sky-200 rounded-xl transition-colors"
+                    title="Copiar link"
+                  >
+                    <Copy className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-white border border-slate-100 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-extrabold text-slate-900">{profile.referral_count ?? 0}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">amigos indicados</p>
+                </div>
+                <div className="bg-white border border-slate-100 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-extrabold text-emerald-600">{Math.floor((profile.referral_count ?? 0) / 1)}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">meses grátis ganhos</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-start gap-2.5 text-sm text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                  <span>Você ganha <strong>1 mês grátis</strong> por cada amigo que assinar</span>
+                </div>
+                <div className="flex items-start gap-2.5 text-sm text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                  <span>Seu amigo recebe <strong>50% de desconto</strong> no primeiro mês</span>
+                </div>
+              </div>
+            </section>
+
+            {/* Upgrade CTA */}
+            {!userIsPro && (
+              <section className="dash-card p-0 overflow-hidden">
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-center">
+                  <div className="w-14 h-14 bg-gradient-to-br from-sky-400 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-sky-500/30">
+                    {userPlan === 'starter' ? <Crown className="w-7 h-7 text-white" /> : <Zap className="w-7 h-7 text-white" />}
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    {userPlan === 'starter' ? 'Upgrade para Pro' : 'Comece com o Starter'}
+                  </h3>
+                  <p className="text-slate-400 text-sm mb-6 max-w-sm mx-auto">
+                    {userPlan === 'starter'
+                      ? <>Links ilimitados, embeds de vídeo, agendamento e analytics completo por <strong className="text-white">R$ 19,90/mês</strong></>
+                      : <>PIX integrado, todos os temas, até 20 links por apenas <strong className="text-white">R$ 9,90/mês</strong></>
+                    }
+                  </p>
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-sky-500/20 transition-all flex items-center gap-2 mx-auto"
+                  >
+                    {userPlan === 'starter' ? <Crown className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                    {userPlan === 'starter' ? 'Upgrade Pro' : 'Assinar Starter'}
+                  </button>
+                </div>
+              </section>
+            )}
           </div>
 
           {/* Preview Column */}
@@ -1321,6 +1853,15 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
           </div>
         </div>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        userId={user.id}
+        email={user.email}
+        currentPlan={userPlan}
+      />
     </div>
   )
 }
