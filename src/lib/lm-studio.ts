@@ -37,6 +37,8 @@ Exemplos de bons títulos:
 
 Responda APENAS com o título sugerido, sem explicações.`
 
+    console.log('[LM Studio] Conectando em:', LM_STUDIO_API)
+
     const response = await fetch(LM_STUDIO_API, {
       method: 'POST',
       headers: {
@@ -61,7 +63,8 @@ Responda APENAS com o título sugerido, sem explicações.`
     })
 
     if (!response.ok) {
-      throw new Error(`LM Studio API error: ${response.status}`)
+      console.error('[LM Studio] Erro HTTP:', response.status, response.statusText)
+      throw new Error(`API error (${response.status}): ${response.statusText}`)
     }
 
     const data = await response.json() as {
@@ -71,16 +74,26 @@ Responda APENAS com o título sugerido, sem explicações.`
     const title = data.choices[0]?.message?.content?.trim() || ''
 
     if (!title) {
-      throw new Error('Empty response from LM Studio')
+      throw new Error('LM Studio retornou resposta vazia')
     }
+
+    console.log('[LM Studio] Título gerado:', title)
 
     return {
       title,
       description: `Sugestão gerada para ${domain}`,
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    throw new Error(`Failed to generate auto title: ${message}`)
+    let message = 'Erro desconhecido'
+
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      message = `Não conseguiu conectar em ${LM_STUDIO_API}. Verifique se LM Studio está rodando e acessível.`
+    } else if (error instanceof Error) {
+      message = error.message
+    }
+
+    console.error('[LM Studio] Erro:', message)
+    throw new Error(message)
   }
 }
 
