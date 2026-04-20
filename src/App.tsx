@@ -22,7 +22,7 @@ import { supabase } from './lib/supabase'
 import type { User, Link } from './lib/supabase'
 import { generatePixPayload, getPixQrCodeUrl, isValidPixKey } from './lib/pix'
 import { detectLinkType, getFaviconUrl } from './lib/icons'
-import { PLANS, FREE_THEMES, isPro, canAddMoreLinks } from './lib/plans'
+import { PLANS, FREE_THEMES, isPro, isAtLeastStarter, canAddMoreLinks } from './lib/plans'
 import { createCheckoutSession, logSubscriptionEvent } from './lib/stripe'
 import {
   Link2, CreditCard, Smartphone, Palette, BarChart3,
@@ -795,13 +795,21 @@ function AnalyticsDashboard({ userId, links }: { userId: string, links: Link[] }
   )
 }
 
-// Pro Badge Component
+// Plan Badge Component
 function PlanBadge({ plan }: { plan: string }) {
   if (plan === 'pro') {
     return (
-      <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 text-xs font-bold rounded-full uppercase tracking-wider border border-amber-200">
+      <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700 text-xs font-bold rounded-full uppercase tracking-wider border border-violet-200">
         <Crown className="w-3 h-3" />
         Pro
+      </div>
+    )
+  }
+  if (plan === 'starter') {
+    return (
+      <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-sky-100 to-blue-100 text-sky-700 text-xs font-bold rounded-full uppercase tracking-wider border border-sky-200">
+        <Zap className="w-3 h-3" />
+        Starter
       </div>
     )
   }
@@ -830,15 +838,21 @@ function UpgradeInline({ feature, onUpgrade }: { feature: string, onUpgrade: () 
   )
 }
 
-// Upgrade Modal Component
-function UpgradeModal({ isOpen, onClose, userId, email }: { isOpen: boolean, onClose: () => void, userId: string, email: string }) {
-  const [loading, setLoading] = useState(false)
+// Upgrade Modal Component — shows 3-plan comparison
+function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
+  isOpen: boolean
+  onClose: () => void
+  userId: string
+  email: string
+  currentPlan?: string
+}) {
+  const [loading, setLoading] = useState<'starter' | 'pro' | null>(null)
   const [error, setError] = useState('')
 
   if (!isOpen) return null
 
-  async function handleUpgrade() {
-    setLoading(true)
+  async function handleUpgrade(plan: 'starter' | 'pro') {
+    setLoading(plan)
     setError('')
     try {
       await logSubscriptionEvent(userId, 'checkout_started')
@@ -846,76 +860,153 @@ function UpgradeModal({ isOpen, onClose, userId, email }: { isOpen: boolean, onC
       if (checkoutUrl) {
         window.location.href = checkoutUrl
       } else {
-        setError('Pagamento ainda não configurado. Entre em contato pelo WhatsApp para assinar o plano Pro.')
+        setError('Pagamento ainda não configurado. Entre em contato pelo WhatsApp para assinar.')
       }
     } catch {
       setError('Erro ao iniciar pagamento. Tente novamente.')
     } finally {
-      setLoading(false)
+      setLoading(null)
     }
   }
 
+  const planCards = [
+    {
+      id: 'starter' as const,
+      label: 'Starter',
+      price: 'R$ 9,90',
+      period: '/mês',
+      badge: null,
+      icon: <Zap className="w-6 h-6 text-sky-600" />,
+      iconBg: 'bg-sky-50',
+      btnClass: 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700',
+      borderClass: 'border-sky-200',
+      features: PLANS.starter.features,
+      limit: '20 links',
+    },
+    {
+      id: 'pro' as const,
+      label: 'Pro',
+      price: 'R$ 19,90',
+      period: '/mês',
+      badge: 'Mais recursos',
+      icon: <Crown className="w-6 h-6 text-violet-600" />,
+      iconBg: 'bg-violet-50',
+      btnClass: 'bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700',
+      borderClass: 'border-violet-200',
+      features: PLANS.pro.features,
+      limit: 'Links ilimitados',
+    },
+  ]
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl my-4">
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-center">
+        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-center">
           <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white p-1">
             <X className="w-5 h-5" />
           </button>
-          <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
-            <Crown className="w-8 h-8 text-white" />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Upgrade para Pro</h2>
-          <p className="text-slate-300 text-sm">Desbloqueie todo o potencial do LinkFácil</p>
+          <h2 className="text-2xl font-bold text-white mb-1">Escolha seu plano</h2>
+          <p className="text-slate-300 text-sm">Desbloqueie mais do LinkFácil</p>
         </div>
 
-        {/* Pricing */}
-        <div className="p-8">
-          <div className="text-center mb-6">
-            <div className="flex items-baseline justify-center gap-1">
-              <span className="text-slate-400 line-through text-sm mr-2">R$ 19,90</span>
-              <span className="text-4xl font-extrabold text-slate-900">R$ 9,90</span>
-              <span className="text-slate-500">/mês</span>
-            </div>
-            <p className="text-xs text-emerald-600 font-bold mt-1">Economize 50% - Oferta de lançamento</p>
-          </div>
-
-          {/* Features */}
-          <div className="space-y-3 mb-8">
-            {PLANS.pro.features.map((feature, idx) => (
-              <div key={idx} className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <Check className="w-3 h-3 text-emerald-600" />
+        {/* Plan Cards */}
+        <div className="p-6 grid sm:grid-cols-2 gap-4">
+          {planCards.map((plan) => {
+            const isCurrent = currentPlan === plan.id
+            const isLoading = loading === plan.id
+            return (
+              <div key={plan.id} className={`border-2 rounded-2xl p-5 flex flex-col ${isCurrent ? 'border-emerald-400 bg-emerald-50/30' : plan.borderClass + ' bg-white'}`}>
+                {isCurrent && (
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2">Plano atual</span>
+                )}
+                {plan.badge && !isCurrent && (
+                  <span className="text-[10px] font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full w-fit mb-2">{plan.badge}</span>
+                )}
+                <div className={`w-10 h-10 ${plan.iconBg} rounded-xl flex items-center justify-center mb-3`}>
+                  {plan.icon}
                 </div>
-                <span className="text-sm text-slate-700">{feature}</span>
+                <p className="font-bold text-slate-900 text-lg mb-0.5">{plan.label}</p>
+                <div className="flex items-baseline gap-0.5 mb-4">
+                  <span className="text-2xl font-extrabold text-slate-900">{plan.price}</span>
+                  <span className="text-slate-400 text-sm">{plan.period}</span>
+                </div>
+                <ul className="space-y-2 mb-5 flex-1">
+                  {plan.features.map((f, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-slate-600">
+                      <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => handleUpgrade(plan.id)}
+                  disabled={!!loading || isCurrent}
+                  className={`w-full ${plan.btnClass} text-white py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
+                >
+                  {isLoading ? 'Processando...' : isCurrent ? 'Plano ativo' : `Assinar ${plan.label}`}
+                </button>
               </div>
-            ))}
+            )
+          })}
+        </div>
+
+        {error && (
+          <div className="px-6 pb-4">
+            <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm text-center">{error}</div>
           </div>
+        )}
 
-          {error && (
-            <div className="bg-red-50 text-red-700 p-3 rounded-xl mb-4 text-sm text-center">{error}</div>
-          )}
+        <p className="text-xs text-slate-400 pb-6 text-center flex items-center justify-center gap-2">
+          <ShieldCheck className="w-4 h-4" />
+          7 dias de garantia • Cancele quando quiser
+        </p>
+      </div>
+    </div>
+  )
+}
 
-          <button
-            onClick={handleUpgrade}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? 'Processando...' : (
-              <>
-                <Zap className="w-5 h-5" />
-                Assinar Pro Agora
-              </>
-            )}
-          </button>
+// Usage Meter — visual indicator of link limit usage
+function UsageMeter({ current, plan, onUpgrade }: { current: number, plan: string, onUpgrade: () => void }) {
+  const config = PLANS[plan as keyof typeof PLANS] || PLANS.free
+  const isUnlimited = config.maxLinks === Infinity
+  if (isUnlimited) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+        <span className="text-xs text-slate-400 font-medium">Ilimitados</span>
+      </div>
+    )
+  }
 
-          <p className="text-xs text-slate-400 mt-4 text-center flex items-center justify-center gap-2">
-            <ShieldCheck className="w-4 h-4" />
-            7 dias de garantia • Cancele quando quiser
-          </p>
+  const max = config.maxLinks
+  const pct = Math.min((current / max) * 100, 100)
+  const atLimit = current >= max
+  const nearLimit = current >= max * 0.8
+
+  const barColor = atLimit ? 'bg-red-500' : nearLimit ? 'bg-amber-500' : 'bg-sky-500'
+  const textColor = atLimit ? 'text-red-600' : nearLimit ? 'text-amber-600' : 'text-slate-500'
+
+  const nextPlan = plan === 'free' ? 'Starter' : 'Pro'
+  const nextLimit = plan === 'free' ? '20 links' : 'ilimitados'
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5">
+        <span className={`text-xs font-bold ${textColor}`}>{current}/{max}</span>
+        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
       </div>
+      {atLimit && (
+        <button
+          onClick={onUpgrade}
+          className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full transition-colors"
+        >
+          <ChevronRight className="w-3 h-3" />
+          {nextPlan} ({nextLimit})
+        </button>
+      )}
     </div>
   )
 }
@@ -1121,6 +1212,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
   const userPlan = profile.plan || 'free'
   const userIsPro = isPro(userPlan)
+  const userIsAtLeastStarter = isAtLeastStarter(userPlan)
 
   // Check for upgrade success in URL
   useEffect(() => {
@@ -1274,10 +1366,19 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
           </div>
 
           <div className="flex items-center gap-3">
-            {!userIsPro && (
+            {userPlan === 'free' && (
               <button
                 onClick={() => setShowUpgradeModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-sm shadow-amber-500/20"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-sm shadow-sky-500/20"
+              >
+                <Zap className="w-4 h-4" />
+                <span className="hidden sm:inline">Upgrade Starter</span>
+              </button>
+            )}
+            {userPlan === 'starter' && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-sm shadow-violet-500/20"
               >
                 <Crown className="w-4 h-4" />
                 <span className="hidden sm:inline">Upgrade Pro</span>
@@ -1406,7 +1507,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {themes.map((t) => {
-                  const isLocked = !userIsPro && !FREE_THEMES.includes(t.id)
+                  const isLocked = !userIsAtLeastStarter && !FREE_THEMES.includes(t.id)
                   return (
                     <button
                       key={t.id}
@@ -1431,7 +1532,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                         <div className="w-4 h-4 rounded-full border border-black/5" style={{ backgroundColor: t.colors[1] }} />
                       </div>
                       <span className={`text-sm font-bold ${profile.theme === t.id ? 'text-sky-700' : 'text-slate-600'}`}>{t.name}</span>
-                      {isLocked && <span className="block text-[10px] text-amber-500 font-bold mt-0.5">PRO</span>}
+                      {isLocked && <span className="block text-[10px] text-sky-500 font-bold mt-0.5">STARTER</span>}
                     </button>
                   )
                 })}
@@ -1458,9 +1559,11 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {!userIsPro && (
-                    <span className="text-[10px] text-slate-400 font-medium">{links.length}/{PLANS.free.maxLinks}</span>
-                  )}
+                  <UsageMeter
+                    current={links.length}
+                    plan={userPlan}
+                    onUpgrade={() => setShowUpgradeModal(true)}
+                  />
                   <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center font-bold text-sm sm:text-base">
                     {links.length}
                   </div>
@@ -1546,7 +1649,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                     <p className="text-sm text-slate-500">Receba direto na sua conta</p>
                   </div>
                 </div>
-                {userIsPro ? (
+                {userIsAtLeastStarter ? (
                   <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ${profile.pix_enabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
                     onClick={() => {
                       const nextVal = !profile.pix_enabled;
@@ -1559,15 +1662,15 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
                 ) : (
                   <button
                     onClick={() => setShowUpgradeModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 text-xs font-bold rounded-full border border-amber-200 hover:bg-amber-100 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 text-sky-600 text-xs font-bold rounded-full border border-sky-200 hover:bg-sky-100 transition-colors"
                   >
                     <Lock className="w-3 h-3" />
-                    Pro
+                    Starter
                   </button>
                 )}
               </div>
 
-              {!userIsPro ? (
+              {!userIsAtLeastStarter ? (
                 <UpgradeInline feature="PIX integrado" onUpgrade={() => setShowUpgradeModal(true)} />
               ) : (
               <div className="space-y-4">
@@ -1624,23 +1727,81 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               )}
             </section>
 
-            {/* Upgrade CTA for Free users */}
+            {/* Referral Section */}
+            <section className="dash-card p-6 sm:p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <Star className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Indique Amigos</h2>
+                  <p className="text-xs text-slate-500">Ganhe 1 mês grátis por indicação</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50 to-sky-50 border border-emerald-100 rounded-2xl p-5 mb-4">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Seu link de indicação</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-sm font-medium text-slate-800 bg-white border border-slate-200 px-3 py-2 rounded-xl truncate">
+                    linkfacil.app/ref/{profile.slug}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`https://linkfacil.app/ref/${profile.slug}`)
+                    }}
+                    className="p-2 bg-white border border-slate-200 hover:bg-sky-50 hover:border-sky-200 rounded-xl transition-colors"
+                    title="Copiar link"
+                  >
+                    <Copy className="w-4 h-4 text-slate-500" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-white border border-slate-100 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-extrabold text-slate-900">{profile.referral_count ?? 0}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">amigos indicados</p>
+                </div>
+                <div className="bg-white border border-slate-100 rounded-xl p-4 text-center">
+                  <p className="text-2xl font-extrabold text-emerald-600">{Math.floor((profile.referral_count ?? 0) / 1)}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">meses grátis ganhos</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-start gap-2.5 text-sm text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                  <span>Você ganha <strong>1 mês grátis</strong> por cada amigo que assinar</span>
+                </div>
+                <div className="flex items-start gap-2.5 text-sm text-slate-600">
+                  <Check className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                  <span>Seu amigo recebe <strong>50% de desconto</strong> no primeiro mês</span>
+                </div>
+              </div>
+            </section>
+
+            {/* Upgrade CTA */}
             {!userIsPro && (
               <section className="dash-card p-0 overflow-hidden">
                 <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-center">
-                  <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
-                    <Crown className="w-7 h-7 text-white" />
+                  <div className="w-14 h-14 bg-gradient-to-br from-sky-400 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-sky-500/30">
+                    {userPlan === 'starter' ? <Crown className="w-7 h-7 text-white" /> : <Zap className="w-7 h-7 text-white" />}
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Desbloqueie o plano Pro</h3>
+                  <h3 className="text-xl font-bold text-white mb-2">
+                    {userPlan === 'starter' ? 'Upgrade para Pro' : 'Comece com o Starter'}
+                  </h3>
                   <p className="text-slate-400 text-sm mb-6 max-w-sm mx-auto">
-                    Links ilimitados, PIX integrado, todos os temas e muito mais por apenas <strong className="text-white">R$ 9,90/mês</strong>
+                    {userPlan === 'starter'
+                      ? <>Links ilimitados, embeds de vídeo, agendamento e analytics completo por <strong className="text-white">R$ 19,90/mês</strong></>
+                      : <>PIX integrado, todos os temas, até 20 links por apenas <strong className="text-white">R$ 9,90/mês</strong></>
+                    }
                   </p>
                   <button
                     onClick={() => setShowUpgradeModal(true)}
-                    className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 mx-auto"
+                    className="bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-sky-500/20 transition-all flex items-center gap-2 mx-auto"
                   >
-                    <Zap className="w-4 h-4" />
-                    Fazer Upgrade
+                    {userPlan === 'starter' ? <Crown className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                    {userPlan === 'starter' ? 'Upgrade Pro' : 'Assinar Starter'}
                   </button>
                 </div>
               </section>
@@ -1699,6 +1860,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
         onClose={() => setShowUpgradeModal(false)}
         userId={user.id}
         email={user.email}
+        currentPlan={userPlan}
       />
     </div>
   )

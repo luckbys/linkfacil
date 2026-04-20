@@ -6,7 +6,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Types
-export type PlanType = 'free' | 'pro'
+export type PlanType = 'free' | 'starter' | 'pro'
 export type SubscriptionStatus = 'active' | 'inactive' | 'past_due' | 'canceled'
 
 export interface User {
@@ -24,6 +24,7 @@ export interface User {
   subscription_id?: string
   subscription_status: SubscriptionStatus
   subscription_ends_at?: string | null
+  referral_count?: number
   created_at: string
 }
 
