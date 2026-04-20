@@ -22,6 +22,7 @@ import { supabase } from './lib/supabase'
 import type { User, Link } from './lib/supabase'
 import { generatePixPayload, getPixQrCodeUrl, isValidPixKey } from './lib/pix'
 import { detectLinkType, getFaviconUrl } from './lib/icons'
+import { generateAutoTitle } from './lib/lm-studio'
 import { PLANS, FREE_THEMES, isPro, isAtLeastStarter, canAddMoreLinks } from './lib/plans'
 import { createCheckoutSession, logSubscriptionEvent } from './lib/stripe'
 import {
@@ -29,7 +30,7 @@ import {
   ChevronRight, Check, LogOut,
   Trash2, GripVertical, Plus, Copy, CheckCircle, X, ShieldCheck,
   Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play,
-  Crown, Zap, Lock, Star, Sun, Moon, Monitor
+  Crown, Zap, Lock, Star, Sun, Moon, Monitor, Sparkles
 } from 'lucide-react'
 
 // Embed Helper Functions
@@ -1281,6 +1282,9 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
   const [showMobilePreview, setShowMobilePreview] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [reorderSaving, setReorderSaving] = useState(false)
+  const [suggestedTitle, setSuggestedTitle] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const userPlan = profile.plan || 'free'
   const userIsPro = isPro(userPlan)
@@ -1336,6 +1340,8 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
     if (!error && data) {
       setLinks([...links, data[0] as Link])
       setNewLink({ title: '', url: '', type: 'link' })
+      setSuggestedTitle(null)
+      setAiError(null)
     }
     setLoading(false)
   }
@@ -1344,6 +1350,22 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
     if (!confirm('Deseja realmente excluir este link?')) return
     await supabase.from('links').delete().eq('id', id)
     setLinks(links.filter(l => l.id !== id))
+  }
+
+  async function generateTitleWithAI() {
+    if (!newLink.url) return
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const result = await generateAutoTitle(newLink.url)
+      setSuggestedTitle(result.title)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro ao gerar título'
+      setAiError(msg)
+      setSuggestedTitle(null)
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   // Drag-and-drop sensors with activation constraint to prevent accidental drags
@@ -1696,16 +1718,63 @@ function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, on
                     onChange={(e) => setNewLink({ ...newLink, title: e.target.value })}
                     className="input-custom input-focus py-2.5"
                   />
-                  <input
-                    type="url"
-                    id="new-link-url"
-                    aria-label="URL do link"
-                    placeholder="URL (Ex: https://wa.me/...)"
-                    value={newLink.url}
-                    onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
-                    className="input-custom input-focus py-2.5"
-                  />
+                  <div className="relative">
+                    <input
+                      type="url"
+                      id="new-link-url"
+                      aria-label="URL do link"
+                      placeholder="URL (Ex: https://wa.me/...)"
+                      value={newLink.url}
+                      onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
+                      className="input-custom input-focus py-2.5 pr-14"
+                    />
+                    {newLink.url && (
+                      <button
+                        onClick={generateTitleWithAI}
+                        disabled={aiLoading}
+                        aria-label="Gerar título com IA"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Gerar título com IA"
+                      >
+                        <Sparkles className={`w-5 h-5 ${aiLoading ? 'animate-spin' : ''}`} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Suggested Title Card */}
+                {(suggestedTitle || aiError) && (
+                  <div className="mb-4 p-4 rounded-xl border-2 bg-white">
+                    {aiError ? (
+                      <div className="text-sm text-red-600">
+                        <p className="font-medium">Erro ao gerar título</p>
+                        <p className="text-xs mt-1">{aiError}</p>
+                      </div>
+                    ) : suggestedTitle ? (
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 mb-2">✨ Sugestão de Título</p>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="text"
+                            value={suggestedTitle}
+                            readOnly
+                            className="flex-1 px-3 py-2 bg-sky-50 border border-sky-200 rounded-lg text-sm font-medium text-sky-900"
+                          />
+                          <button
+                            onClick={() => {
+                              setNewLink({ ...newLink, title: suggestedTitle })
+                              setSuggestedTitle(null)
+                            }}
+                            className="px-3 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 transition-colors whitespace-nowrap"
+                          >
+                            Usar
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
                 <button
                   onClick={addLink}
                   disabled={loading || !newLink.title || !newLink.url}
