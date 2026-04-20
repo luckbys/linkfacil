@@ -8,7 +8,7 @@ export interface AutoTitleResult {
   description?: string
 }
 
-const LM_STUDIO_API = 'http://192.168.56.1:6000/v1/chat/completions'
+const LM_STUDIO_API = import.meta.env.VITE_LM_STUDIO_API || 'http://localhost:1234/v1/chat/completions'
 
 export async function generateAutoTitle(url: string): Promise<AutoTitleResult> {
   try {
