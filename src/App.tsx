@@ -29,7 +29,7 @@ import {
   ChevronRight, Check, LogOut,
   Trash2, GripVertical, Plus, Copy, CheckCircle, X, ShieldCheck,
   Instagram, Youtube, Linkedin, Github, Twitter, Facebook, Mail, MessageCircle, Play,
-  Crown, Zap, Lock, Star
+  Crown, Zap, Lock, Star, Sun, Moon, Monitor
 } from 'lucide-react'
 
 // Embed Helper Functions
@@ -195,8 +195,71 @@ function useAuth() {
   return { user, loading, setUser }
 }
 
+// Color Mode Hook
+type ColorMode = 'light' | 'dark' | 'auto'
+
+function useColorMode() {
+  const [mode, setModeState] = useState<ColorMode>(() => {
+    try {
+      return (localStorage.getItem('linkfacil-color-mode') as ColorMode) || 'auto'
+    } catch {
+      return 'auto'
+    }
+  })
+
+  useEffect(() => {
+    function resolve(m: ColorMode): 'light' | 'dark' {
+      if (m === 'auto') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      }
+      return m
+    }
+
+    document.documentElement.setAttribute('data-appearance', resolve(mode))
+    try { localStorage.setItem('linkfacil-color-mode', mode) } catch {}
+
+    if (mode === 'auto') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      const handler = () => document.documentElement.setAttribute('data-appearance', mq.matches ? 'dark' : 'light')
+      mq.addEventListener('change', handler)
+      return () => mq.removeEventListener('change', handler)
+    }
+  }, [mode])
+
+  return { mode, setMode: setModeState }
+}
+
+function ColorModeToggle({ mode, setMode }: { mode: ColorMode, setMode: (m: ColorMode) => void }) {
+  const modes: { id: ColorMode, icon: typeof Sun, label: string }[] = [
+    { id: 'light', icon: Sun, label: 'Modo claro' },
+    { id: 'dark', icon: Moon, label: 'Modo escuro' },
+    { id: 'auto', icon: Monitor, label: 'Seguir sistema' },
+  ]
+
+  return (
+    <div className="flex items-center bg-slate-100 rounded-xl p-0.5" role="radiogroup" aria-label="Modo de cor">
+      {modes.map(m => {
+        const Icon = m.icon
+        const isActive = mode === m.id
+        return (
+          <button
+            key={m.id}
+            role="radio"
+            aria-checked={isActive}
+            aria-label={m.label}
+            onClick={() => setMode(m.id)}
+            className={`p-1.5 rounded-lg transition-all ${isActive ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // Landing Page - Optimized with landing-page-generator skill
-function LandingPage({ onStart }: { onStart: () => void }) {
+function LandingPage({ onStart, colorMode, setColorMode }: { onStart: () => void, colorMode: ColorMode, setColorMode: (m: ColorMode) => void }) {
   const benefits = [
     { icon: CreditCard, text: 'Receba pagamentos via PIX direto na página' },
     { icon: Smartphone, text: 'Botão de WhatsApp com mensagem personalizada' },
@@ -230,8 +293,11 @@ function LandingPage({ onStart }: { onStart: () => void }) {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] font-sans text-slate-900 selection:bg-sky-100 selection:text-sky-900">
+      {/* Skip to content */}
+      <a href="#main-content" className="skip-to-content">Pular para conteúdo</a>
+
       {/* Sticky Nav */}
-      <nav className="fixed top-0 left-0 right-0 glass z-50 transition-all duration-300">
+      <nav className="fixed top-0 left-0 right-0 glass z-50 transition-all duration-300" role="navigation" aria-label="Navegação principal">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-sky-500/20">
@@ -239,17 +305,20 @@ function LandingPage({ onStart }: { onStart: () => void }) {
             </div>
             <span className="text-xl font-bold tracking-tight text-slate-900">LinkFácil</span>
           </div>
-          <button
-            onClick={onStart}
-            className="btn-primary text-sm md:text-base px-5 py-2.5"
-          >
-            Criar Grátis
-          </button>
+          <div className="flex items-center gap-3">
+            <ColorModeToggle mode={colorMode} setMode={setColorMode} />
+            <button
+              onClick={onStart}
+              className="btn-primary text-sm md:text-base px-5 py-2.5"
+            >
+              Criar Grátis
+            </button>
+          </div>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-24 md:pt-40 md:pb-32 overflow-hidden">
+      <section id="main-content" className="relative pt-32 pb-24 md:pt-40 md:pb-32 overflow-hidden">
         {/* Background Elements */}
         <div className="absolute inset-0 hero-gradient -z-20"></div>
         <div className="absolute inset-0 bg-dot-pattern opacity-50 -z-10"></div>
@@ -1061,6 +1130,7 @@ function SortableLinkItem({
         <button
           {...attributes}
           {...listeners}
+          aria-label="Arrastar para reordenar"
           className="cursor-grab active:cursor-grabbing p-1 text-slate-300 hover:text-slate-400 transition-colors touch-none"
         >
           <GripVertical className="w-5 h-5" />
@@ -1129,8 +1199,8 @@ function SortableLinkItem({
           ))}
           <button
             onClick={() => onDelete(link.id)}
+            aria-label={`Excluir link ${link.title}`}
             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-            title="Excluir"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -1200,7 +1270,7 @@ function SortableLinkItem({
 }
 
 // Dashboard
-function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
+function Dashboard({ user, onLogout, colorMode, setColorMode }: { user: User, onLogout: () => void, colorMode: ColorMode, setColorMode: (m: ColorMode) => void }) {
   const [links, setLinks] = useState<Link[]>([])
   const [profile, setProfile] = useState<User>(user)
   const [newLink, setNewLink] = useState({ title: '', url: '', type: 'link' as const })
@@ -1357,15 +1427,19 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
 
   return (
     <div className="min-h-screen bg-[var(--dash-bg)]">
+      {/* Skip to content */}
+      <a href="#dash-main" className="skip-to-content">Pular para conteúdo</a>
+
       {/* Premium Navbar */}
-      <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4">
+      <nav className="sticky top-0 z-30 glass border-b border-slate-200 px-6 py-4" role="navigation" aria-label="Dashboard">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="LinkDou" className="w-10 h-10 object-contain" />
             <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">LinkDou</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <ColorModeToggle mode={colorMode} setMode={setColorMode} />
             {userPlan === 'free' && (
               <button
                 onClick={() => setShowUpgradeModal(true)}
@@ -1389,6 +1463,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             )}
             <button
               onClick={copyLink}
+              aria-label="Copiar link da página"
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-medium transition-all group active:scale-95"
             >
               {copied ? (
@@ -1406,6 +1481,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
             <button
               onClick={onLogout}
+              aria-label="Sair da conta"
               className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
               title="Sair"
             >
@@ -1415,14 +1491,14 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <main id="dash-main" className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div className="grid lg:grid-cols-12 gap-8 items-start">
 
           {/* Editor Column */}
           <div className="lg:col-span-7 space-y-8 pb-20">
 
             {/* Profile Section */}
-            <section className="dash-card p-4 sm:p-8">
+            <section className="dash-card p-4 sm:p-8" aria-label="Perfil">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seu Perfil</h2>
                 <PlanBadge plan={userPlan} />
@@ -1494,7 +1570,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             </section>
 
             {/* Customization Section */}
-            <section className="dash-card p-4 sm:p-8">
+            <section className="dash-card p-4 sm:p-8" aria-label="Personalização">
               <div className="flex items-center gap-3 mb-4 sm:mb-8">
                 <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
                   <Palette className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -1543,19 +1619,21 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             <AnalyticsDashboard userId={user.id} links={links} />
 
             {/* Links Editor Section */}
-            <section className="dash-card p-0 overflow-hidden">
+            <section className="dash-card p-0 overflow-hidden" aria-label="Links">
               <div className="p-4 sm:p-8 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg sm:text-xl font-bold text-slate-900">Seus Links</h2>
                   <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                    <span aria-live="polite">
                     {reorderSaving ? (
                       <span className="text-sky-600 font-medium inline-flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse" />
+                        <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-pulse" aria-hidden="true" />
                         Salvando nova ordem...
                       </span>
                     ) : (
                       'Arraste para reordenar'
                     )}
+                    </span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1604,18 +1682,22 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
               </div>
 
               {/* Add New Link Form */}
-              <div className="p-6 sm:p-8 bg-slate-50/50 border-t border-slate-100">
-                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Novo Link</h3>
+              <div className="p-6 sm:p-8 bg-slate-50/50 border-t border-slate-100" role="form" aria-label="Adicionar novo link">
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4" id="new-link-heading">Novo Link</h3>
                 <div className="grid sm:grid-cols-2 gap-4 mb-4">
                   <input
                     type="text"
+                    id="new-link-title"
+                    aria-label="Título do link"
                     placeholder="Título (Ex: Meu WhatsApp)"
                     value={newLink.title}
                     onChange={(e) => setNewLink({ ...newLink, title: e.target.value })}
                     className="input-custom input-focus py-2.5"
                   />
                   <input
-                    type="text"
+                    type="url"
+                    id="new-link-url"
+                    aria-label="URL do link"
                     placeholder="URL (Ex: https://wa.me/...)"
                     value={newLink.url}
                     onChange={(e) => setNewLink({ ...newLink, url: e.target.value })}
@@ -1638,7 +1720,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
             </section>
 
             {/* PIX Settings */}
-            <section className="dash-card p-6 sm:p-8">
+            <section className="dash-card p-6 sm:p-8" aria-label="Vendas via PIX">
               <div className="flex items-start justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
@@ -1833,6 +1915,7 @@ function Dashboard({ user, onLogout }: { user: User, onLogout: () => void }) {
       <div className="lg:hidden fixed bottom-6 right-6 z-40">
         <button
           onClick={() => setShowMobilePreview(true)}
+          aria-label="Ver prévia do celular"
           className="w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
         >
           <Smartphone className="w-6 h-6" />
@@ -2182,6 +2265,7 @@ function PublicPage({ slug }: { slug: string }) {
 function App() {
   const [page, setPage] = useState<'landing' | 'auth' | 'dashboard'>('landing')
   const { user, loading } = useAuth()
+  const { mode: colorMode, setMode: setColorMode } = useColorMode()
   const [publicSlug, setPublicSlug] = useState<string | null>(null)
 
   // Check URL for public profile
@@ -2209,12 +2293,14 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {page === 'landing' && <LandingPage onStart={() => setPage('auth')} />}
+      {page === 'landing' && <LandingPage onStart={() => setPage('auth')} colorMode={colorMode} setColorMode={setColorMode} />}
       {page === 'auth' && <AuthPage onAuth={() => setPage('dashboard')} />}
       {page === 'dashboard' && (
         user ? (
           <Dashboard
             user={user}
+            colorMode={colorMode}
+            setColorMode={setColorMode}
             onLogout={() => {
               supabase.auth.signOut()
               setPage('landing')
