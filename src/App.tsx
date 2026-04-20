@@ -968,24 +968,25 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
   ]
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl my-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 overflow-y-auto">
+      <div className="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl my-4">
         {/* Header */}
-        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-center">
-          <button onClick={onClose} className="absolute top-4 right-4 text-white/60 hover:text-white p-1">
+        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 p-4 sm:p-6 text-center">
+          <button onClick={onClose} className="absolute top-3 right-3 sm:top-4 sm:right-4 text-white/60 hover:text-white p-1" aria-label="Fechar">
             <X className="w-5 h-5" />
           </button>
-          <h2 className="text-2xl font-bold text-white mb-1">Escolha seu plano</h2>
-          <p className="text-slate-300 text-sm">Desbloqueie mais do LinkFácil</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Escolha seu plano</h2>
+          <p className="text-slate-300 text-xs sm:text-sm">Desbloqueie mais do LinkFácil</p>
         </div>
 
         {/* Plan Cards */}
-        <div className="p-6 grid sm:grid-cols-2 gap-4">
+        <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {planCards.map((plan) => {
             const isCurrent = currentPlan === plan.id
             const isLoading = loading === plan.id
             return (
-              <div key={plan.id} className={`border-2 rounded-2xl p-5 flex flex-col ${isCurrent ? 'border-emerald-400 bg-emerald-50/30' : plan.borderClass + ' bg-white'}`}>
+              <div key={plan.id} className={`border-2 rounded-2xl p-4 sm:p-5 flex flex-col ${isCurrent ? 'border-emerald-400 bg-emerald-50/30' : plan.borderClass + ' bg-white'}`}>
                 {isCurrent && (
                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2">Plano atual</span>
                 )}
@@ -996,13 +997,13 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
                   {plan.icon}
                 </div>
                 <p className="font-bold text-slate-900 text-lg mb-0.5">{plan.label}</p>
-                <div className="flex items-baseline gap-0.5 mb-4">
+                <div className="flex items-baseline gap-0.5 mb-3 sm:mb-4">
                   <span className="text-2xl font-extrabold text-slate-900">{plan.price}</span>
                   <span className="text-slate-400 text-sm">{plan.period}</span>
                 </div>
-                <ul className="space-y-2 mb-5 flex-1">
+                <ul className="space-y-1.5 sm:space-y-2 mb-4 sm:mb-5 flex-1">
                   {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-slate-600">
+                    <li key={i} className="flex items-center gap-2 text-xs sm:text-sm text-slate-600">
                       <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                       {f}
                     </li>
@@ -1011,7 +1012,7 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
                 <button
                   onClick={() => handleUpgrade(plan.id)}
                   disabled={!!loading || isCurrent}
-                  className={`w-full ${plan.btnClass} text-white py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
+                  className={`w-full ${plan.btnClass} text-white py-2.5 sm:py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2`}
                 >
                   {isLoading ? 'Processando...' : isCurrent ? 'Plano ativo' : `Assinar ${plan.label}`}
                 </button>
@@ -1021,15 +1022,16 @@ function UpgradeModal({ isOpen, onClose, userId, email, currentPlan }: {
         </div>
 
         {error && (
-          <div className="px-6 pb-4">
+          <div className="px-4 sm:px-6 pb-4">
             <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm text-center">{error}</div>
           </div>
         )}
 
-        <p className="text-xs text-slate-400 pb-6 text-center flex items-center justify-center gap-2">
+        <p className="text-xs text-slate-400 pb-4 sm:pb-6 text-center flex items-center justify-center gap-2">
           <ShieldCheck className="w-4 h-4" />
           7 dias de garantia • Cancele quando quiser
         </p>
+      </div>
       </div>
     </div>
   )
